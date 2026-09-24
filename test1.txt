@@ -1,0 +1,64 @@
+COLLECTOR DESIGN ENGINE v1.5
+====================================================================
+SELECTED DESIGN
+--------------------------------------------------------------------
+Connection         : Tubes bonded below absorber plate
+Tube               : Copper 0.5 inch OD BWG16
+Tube OD / ID       : 12.700 / 9.398 mm
+Tube wall          : 1.651 mm
+Absorber           : Aluminium 0.5 mm
+Insulation         : Glass wool, 40.0 mm
+Adhesive           : User-entered adhesive k, k=0.2000 W/m.K
+Covers             : 1
+Cover 1            : Low-iron glass 4 mm
+Cover gap          : 12.0 mm
+
+OPERATING / ENVIRONMENT
+Solar irradiance  : 700.00 W/m2
+Collector tilt beta: 45.00 deg from horizontal
+
+GEOMETRY
+N tubes            : 9
+Tube spacing       : 0.160 m
+Collector length   : 2.069 m
+Collector width    : 1.440 m
+Absorber area      : 2.979 m2
+Total tube length  : 18.621 m
+
+THERMAL
+Required heat      : 1299.94 W
+Efficiency         : 62.332 %
+T plate max        : 48.92 C
+T outlet mean      : 22.62 C
+Overall UL         : 4.059 W/m2.K
+
+FLOW / HYDRAULIC
+Flow mode          : optimize_speed
+Mass flow          : 0.49845 kg/s  (29.967 L/min)
+Tube velocity      : 0.800 m/s
+Mean Reynolds      : 17552
+
+HYDRAULIC
+Pressure drop      : 1896.68 Pa
+Flow nonuniformity : 1.078 %
+Pump power         : 1.457383 W
+
+ECONOMIC
+Entered/model cost  : 27.5587
+
+STATUS / MODEL NOTES
+Thermal requirement: PASS
+Geometry limits    : PASS
+Flow uniformity    : PASS
+Cover gap          : recorded, not yet active in legacy top-loss equation
+Cover model        : legacy-equivalent for one cover; engineering effective-property approximation for two covers
+Feasible candidates: 236
+
+PARETO CANDIDATES
+------------------
+N=9  w=0.160  v=0.80  flow=29.97 L/min  cost=27.559  eta=62.332%  conn=below_plate
+N=8  w=0.140  v=0.80  flow=26.64 L/min  cost=29.808  eta=63.197%  conn=below_plate
+N=9  w=0.120  v=0.80  flow=29.97 L/min  cost=32.114  eta=65.542%  conn=below_plate
+N=12  w=0.100  v=0.80  flow=39.96 L/min  cost=36.195  eta=66.705%  conn=below_plate
+N=17  w=0.080  v=0.80  flow=56.60 L/min  cost=42.600  eta=67.571%  conn=below_plate
+N=18  w=0.060  v=0.80  flow=59.93 L/min  cost=53.274  eta=68.558%  conn=below_plate
