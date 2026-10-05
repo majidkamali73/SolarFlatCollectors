@@ -1,0 +1,4 @@
+id,name,material,thermal_conductivity_W_mK,default_thickness_m,cost_per_m2,data_status,source_note
+glass_wool,Glass wool,Glass wool,0.05,0.04,1.0,legacy_default,Legacy BASIC menu used Ki=0.05 W/m.K
+mineral_wool,Mineral wool,Mineral wool,0.09,0.04,1.0,legacy_default,Legacy BASIC menu used Ki=0.09 W/m.K
+pu_foam,PU foam,Polyurethane foam,0.028,0.04,1.0,example_engineering,Example value; verify product

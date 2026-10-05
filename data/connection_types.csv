@@ -1,0 +1,4 @@
+id,name,legacy_selection,model_note
+below_plate,Tubes bonded below absorber plate,1,Current 2-D model uses adhesive thermal resistance coupling; geometry-specific legacy F-prime remains a reference
+above_plate,Tubes bonded above absorber plate,2,Current 2-D model uses adhesive thermal resistance coupling; geometry-specific legacy F-prime remains a reference
+in_line,Tubes in-line with absorber plate,3,Current 2-D model uses direct tube-to-plate coupling approximation; legacy selection is retained

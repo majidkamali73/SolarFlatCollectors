@@ -28,9 +28,8 @@
 این دقیقاً با ساختار برنامه BASIC قدیمی سازگار است: Solar radiation و Angle of tilt دو ورودی جداگانه بودند.
 
 
---- v1.5: انتخاب دبی/سرعت ---
-در نسخه 1.5 سه حالت برای دبی وجود دارد:
-1) fixed_speed: سرعت متوسط طراحی در هر لوله را وارد کنید؛ برنامه دبی کل را از قطر داخلی لوله و تعداد لوله‌های موازی محاسبه می‌کند.
-2) optimize_speed: برنامه سرعت را در بازه تعریف‌شده در بخش Constraints بررسی می‌کند و بهترین طرح را طبق Objective انتخاب می‌کند.
-3) manual_flow: برای کاربر حرفه‌ای، دبی جرمی کل مستقیماً وارد می‌شود.
-در خروجی، دبی کل، L/min، سرعت متوسط و Reynolds گزارش می‌شوند. سرعت پیش‌فرض 0.50 m/s صرفاً نقطه شروع قابل تغییر است و یک حد عمومی یا مقدار بهینه جهانی محسوب نمی‌شود.
+Version 1.5 notes:
+- Back and side insulation are separate inputs.
+- The GUI displays k, default thickness and data status for the selected insulation.
+- Independent side insulation is an engineering extension of the later 2-D model; it is not an original BASIC input.
+- The original BASIC model did not expose a separate side-insulation thickness/material.

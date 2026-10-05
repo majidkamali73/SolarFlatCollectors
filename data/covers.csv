@@ -1,0 +1,4 @@
+id,name,material,transmittance,refractive_index,emissivity,thickness_m,cost_per_m2,data_status,source_note
+lowiron_4mm,Low-iron glass 4 mm,Low-iron glass,0.90,1.52,0.84,0.004,1.0,example_engineering,Example optical values; verify actual glass product
+float_4mm,Float glass 4 mm,Float glass,0.88,1.52,0.84,0.004,1.0,example_engineering,Example optical values; verify actual glass product
+poly_3mm,Polycarbonate 3 mm,Polycarbonate,0.86,1.58,0.90,0.003,1.0,example_engineering,Example optical values; verify actual sheet product

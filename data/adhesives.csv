@@ -1,0 +1,4 @@
+id,name,material,thermal_conductivity_W_mK,default_thickness_m,cost_per_m,data_status,source_note
+default_ka,User-entered adhesive k,User defined,0.20,0.0005,0.0,legacy_input,Legacy BASIC explicitly asked only for ka; thickness is an engineering-model parameter
+thermal_paste,Thermal adhesive paste,Thermal adhesive,1.0,0.0005,1.0,example_engineering,Example value; verify actual product
+conductive_adhesive,Conductive adhesive,Conductive adhesive,2.0,0.0005,1.0,example_engineering,Example value; verify actual product

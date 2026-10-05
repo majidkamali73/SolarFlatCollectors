@@ -1,12 +1,17 @@
 Solar Collector Design Engine v1.5
 
-New in v1.5:
-- Flow is no longer forced to be a raw user input.
-- fixed_speed: derives total mass flow from a selected mean tube velocity and the actual tube ID and number of parallel tubes.
-- optimize_speed: scans a user-defined velocity range and includes velocity as a design variable, without requiring a separate mass-flow guess.
-- manual_flow: preserves expert direct mass-flow entry.
-- Results report mass flow, L/min, mean tube velocity, and mean Reynolds number.
-- The velocity is a hydraulic design variable/check, not a claim of one universal optimum.
-- Default scan 0.20 to 0.80 m/s in 0.10 m/s steps is a configurable starting range. Verify project-specific limits.
+Main changes:
+1. Back and side insulation are separate material selections and thickness inputs.
+2. The GUI shows thermal conductivity, default thickness, and data status for each selected insulation.
+3. The 2-D engineering model uses separate back resistance Ub=k_back/t_back and side/edge resistance with k_side and t_side.
+4. The side-insulation formulation is an engineering extension of the later 2-D model, not an original BASIC equation.
+5. The original BASIC source exposed Ki and back-insulation thickness in its later reconstructed model but did not expose independent side insulation.
+6. Existing CSV catalogs remain plain comma-separated text files; Excel display is not required for the program to read them.
 
-The legacy BASIC correlations remain in the thermal model. Engineering hydraulic/network extensions are reported separately.
+Python 3.7.2 / Tkinter / standard library only.
+
+Corrections after v1.5 review:
+- Cover infrared emissivity now comes from the emissivity column of data/covers.csv (default 0.88 when the model is called directly). The former 1 - R - tau estimate gave about 0.08 for glass and under-predicted top loss.
+- Two covers: the model applies tau**M, so the engine now passes the per-cover (geometric mean) transmittance; the second cover is no longer applied twice.
+- Independent side insulation is now active in coupled_case_fast, which is the path used by the design engine and the GUI.
+- GUI: the adhesive selector has its own row and no longer covers the side-insulation selector.

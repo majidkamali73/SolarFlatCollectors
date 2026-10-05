@@ -169,12 +169,14 @@ def coupled_case(mdot_total=0.1, N=10, w=0.10, L1=3.0,
                  plate_k=237.0, plate_delta=0.0005,
                  adhesive_k=0.2, adhesive_delta=0.0005,
                  insulation_k=0.04, deltab=0.04,
+                 side_insulation_k=None, side_insulation_thickness_m=None,
                  solar_I=760.0, Ta=15.0, Tfi=20.0, wind=2.0,
                  beta=30.0, M=1.0, tau=0.90, n_cover=1.52,
                  eps_p=0.95, alpha=0.95, Dh_ratio=3.0,
                  connection_fraction=0.5, K_branch_in=0.0, K_branch_out=0.0,
                  pump_efficiency=0.65, nx=36, ny_per_gap=5,
-                 max_outer=35, max_plate=800, relax=0.55):
+                 max_outer=35, max_plate=800, relax=0.55,
+                 cover_emissivity=None):
     rho, mu, cp, k = 998.0, 0.0004275, 4180.0, 0.60
     L2 = N * w
     Ap = L1 * L2
@@ -185,11 +187,19 @@ def coupled_case(mdot_total=0.1, N=10, w=0.10, L1=3.0,
     hw = 5.7 + 3.8 * wind
     fwind = (1.0 - 0.04 * hw + 0.0005 * hw ** 2) * (1.0 + 0.091 * M)
     C = 365.9 * (1.0 - 0.00883 * beta + 0.0001298 * beta ** 2)
-    R = ((1.0 - n_cover) / (2.0 + n_cover)) ** 2
-    eps_c = 1.0 - R - tau
+    # Infrared emissivity of the cover is a material property (glass is
+    # opaque in the infrared); it is not 1 - R - tau of the solar band.
+    eps_c = 0.88 if cover_emissivity is None else cover_emissivity
     Ub = insulation_k / deltab
-    L3 = deltab + M * 0.03 + 0.01
-    Us = ((L1 + L2) * L3 * insulation_k) / (L1 * L2 * deltab)
+    side_k = insulation_k if side_insulation_k is None else side_insulation_k
+    side_delta = deltab if side_insulation_thickness_m is None else side_insulation_thickness_m
+    if side_k <= 0 or side_delta <= 0:
+        raise ValueError("Side insulation conductivity and thickness must be positive.")
+    # Engineering extension: independent side insulation. The edge-path
+    # width uses side thickness in place of the old shared back-insulation
+    # thickness. This is not an original BASIC relation.
+    L3 = side_delta + M * 0.03 + 0.01
+    Us = ((L1 + L2) * L3 * side_k) / (L1 * L2 * side_delta)
 
     hyd = solve_header_distribution(mdot_total, N, di, rho, mu, L1, w,
                                     Dh_ratio * di, connection_fraction,
@@ -330,21 +340,27 @@ def coupled_case_fast(mdot_total=0.1, N=10, w=0.10, L1=3.0,
                  plate_k=237.0, plate_delta=0.0005,
                  adhesive_k=0.2, adhesive_delta=0.0005,
                  insulation_k=0.04, deltab=0.04,
+                 side_insulation_k=None, side_insulation_thickness_m=None,
                  solar_I=760.0, Ta=15.0, Tfi=20.0, wind=2.0,
                  beta=30.0, M=1.0, tau=0.90, n_cover=1.52,
                  eps_p=0.95, alpha=0.95, Dh_ratio=3.0,
                  connection_fraction=0.5, K_branch_in=0.0, K_branch_out=0.0,
                  pump_efficiency=0.65, nx=40, ny_per_gap=5,
-                 max_outer=30, relax=0.6):
+                 max_outer=30, relax=0.6, cover_emissivity=None):
     # Pure-Python implementation: intentionally no NumPy/SciPy dependency.
     # This is compatible with stock Python 3.7.2 + IDLE.
     rho, mu, cp, k = 998.0, 0.0004275, 4180.0, 0.60
     L2=N*w; Ap=L1*L2; dx=L1/float(nx); ny=max(N*ny_per_gap,N+2); dy=L2/float(ny)
     S=solar_I*(tau**M)*alpha; hw=5.7+3.8*wind
     fwind=(1-.04*hw+.0005*hw**2)*(1+.091*M); C=365.9*(1-.00883*beta+.0001298*beta**2)
-    R=((1-n_cover)/(2+n_cover))**2; eps_c=1-R-tau
-    Ub=insulation_k/deltab; L3=deltab+M*.03+.01
-    Us=((L1+L2)*L3*insulation_k)/(L1*L2*deltab)
+    eps_c=0.88 if cover_emissivity is None else cover_emissivity
+    Ub=insulation_k/deltab
+    side_k=insulation_k if side_insulation_k is None else side_insulation_k
+    side_delta=deltab if side_insulation_thickness_m is None else side_insulation_thickness_m
+    if side_k<=0 or side_delta<=0:
+        raise ValueError('Side insulation conductivity and thickness must be positive.')
+    L3=side_delta+M*.03+.01
+    Us=((L1+L2)*L3*side_k)/(L1*L2*side_delta)
     hyd=solve_header_distribution(mdot_total,N,di,rho,mu,L1,w,Dh_ratio*di,connection_fraction,connection_fraction,K_branch_in,K_branch_out)
     flows=hyd['tube_flows']
     tube_data=[thermal_tube(m,di,rho,mu,k,cp) for m in flows]

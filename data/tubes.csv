@@ -1,0 +1,4 @@
+id,name,material,od_m,id_m,thermal_conductivity_W_mK,cost_per_m,data_status,source_note
+cu_0p5_bwg16,Copper 0.5 inch OD BWG16,Copper,0.0127,0.009398,385,1.0,example_engineering,Replace price and verify dimensions for project use
+al_0p5_wall1,Aluminium tube 12.7 mm OD x 1.0 mm wall,Aluminium,0.0127,0.0107,205,1.0,example_engineering,Example catalog value
+steel_0p5_bwg16,Steel 0.5 inch OD BWG16,Steel,0.0127,0.009398,50,1.0,example_engineering,Example catalog value

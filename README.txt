@@ -26,7 +26,7 @@ IMPORTANT MODEL STATUS
 
 RUN
 1. Put all files in one folder.
-2. In IDLE, open collector_design_gui_v1_2.py.
+2. In IDLE, open collector_design_gui_v1_4.py.
 3. Run Module > Run Module.
 4. Enter project data and press OPTIMIZE.
 
@@ -41,4 +41,8 @@ V1.3 IMPORTANT INPUT CLARIFICATION
 - This interpretation follows the legacy BASIC source, which directly asks for Solar radiation (W/m2) and separately asks for Angle of tilt (Degree).
 
 
-v1.5: hydraulic flow design can be fixed by tube velocity, optimized over a velocity range, or entered manually.
+Version 1.5 notes:
+- Back and side insulation are separate inputs.
+- The GUI displays k, default thickness and data status for the selected insulation.
+- Independent side insulation is an engineering extension of the later 2-D model; it is not an original BASIC input.
+- The original BASIC model did not expose a separate side-insulation thickness/material.

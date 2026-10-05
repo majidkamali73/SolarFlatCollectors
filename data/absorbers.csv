@@ -1,0 +1,4 @@
+id,name,material,thermal_conductivity_W_mK,thickness_m,absorptivity,emissivity,cost_per_m2,data_status,source_note
+al_0p5,Aluminium 0.5 mm,Aluminium,237,0.0005,0.95,0.95,1.0,example_engineering,Example values; verify coating and price
+cu_0p5,Copper 0.5 mm,Copper,385,0.0005,0.95,0.85,1.0,example_engineering,Example values; verify surface treatment and price
+steel_0p6,Steel 0.6 mm,Steel,50,0.0006,0.90,0.80,1.0,example_engineering,Example values; verify surface treatment and price
