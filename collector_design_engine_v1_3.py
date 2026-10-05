@@ -64,6 +64,7 @@ def design_collector(heat_required,inlet_temperature,ambient_temperature,
                      absorber_id='al_0p5',tube_id='cu_0p5_bwg16',
                      cover1_id='lowiron_4mm',cover2_id=None,cover_gap_m=0.012,
                      insulation_id='glass_wool',insulation_thickness_m=None,
+                     side_insulation_id=None,side_insulation_thickness_m=None,
                      adhesive_id='default_ka',adhesive_k_W_mK=None,adhesive_thickness_m=None,
                      connection_type='below_plate',mdot_total=0.10,
                      flow_mode='fixed_speed',design_velocity_m_s=0.5,
@@ -120,6 +121,13 @@ def design_collector(heat_required,inlet_temperature,ambient_temperature,
     ins_k=_f(insulation,'thermal_conductivity_W_mK')
     ins_delta=_f(insulation,'default_thickness_m') if insulation_thickness_m is None else float(insulation_thickness_m)
     if ins_delta<=0: raise ValueError('Insulation thickness must be positive.')
+    # Side insulation is an engineering extension, not an original BASIC input.
+    # When it is not given, the back insulation is used for the edges too.
+    if side_insulation_id is None: side_insulation_id=insulation_id
+    side_insulation=get_by_id(catalog('insulation'),side_insulation_id)
+    side_ins_k=_f(side_insulation,'thermal_conductivity_W_mK')
+    side_ins_delta=ins_delta if side_insulation_thickness_m is None else float(side_insulation_thickness_m)
+    if side_ins_delta<=0: raise ValueError('Side insulation thickness must be positive.')
     adh_k=_f(adhesive,'thermal_conductivity_W_mK') if adhesive_k_W_mK is None else float(adhesive_k_W_mK)
     adh_delta=_f(adhesive,'default_thickness_m') if adhesive_thickness_m is None else float(adhesive_thickness_m)
     if adh_k<=0: raise ValueError('Adhesive thermal conductivity must be positive.')
@@ -165,6 +173,7 @@ def design_collector(heat_required,inlet_temperature,ambient_temperature,
                         di=di,do=do,plate_k=plate_k,plate_delta=plate_delta,
                         adhesive_k=model_adh_k,adhesive_delta=model_adh_delta,
                         insulation_k=ins_k,deltab=ins_delta,
+                        side_insulation_k=side_ins_k,side_insulation_thickness_m=side_ins_delta,
                         solar_I=solar_irradiance,Ta=ambient_temperature,Tfi=inlet_temperature,
                         wind=wind_speed,beta=beta,alpha=alpha,tau=tau_per_cover,n_cover=n_cover,eps_p=eps_p,M=M,cover_emissivity=cover_eps,
                         **solver_options)
@@ -184,6 +193,7 @@ def design_collector(heat_required,inlet_temperature,ambient_temperature,
                 x.update({'beta_deg':beta,'solar_irradiance_W_m2':solar_irradiance,'absorber_id':absorber_id,'tube_id':tube_id,'cover1_id':cover1_id,
                           'cover2_id':cover2_id or 'none','cover_count':M,'cover_gap_m':cover_gap_m,
                           'insulation_id':insulation_id,'insulation_thickness_m':ins_delta,
+                          'side_insulation_id':side_insulation_id,'side_insulation_thickness_m':side_ins_delta,
                           'adhesive_id':adhesive_id,'adhesive_k_W_mK':adh_k,'adhesive_thickness_m':adh_delta,
                           'connection_type':connection_type,'connection_name':connections['name'],
                           'tube_wall_m':0.5*(do-di),'tube_length_m':tube_length,'cost':cost,
@@ -201,7 +211,7 @@ def design_collector(heat_required,inlet_temperature,ambient_temperature,
             'flow_settings':{'mode':flow_mode,'design_velocity_m_s':float(design_velocity_m_s),
                              'velocity_values':list(velocity_values) if flow_mode=='optimize_speed' else [float(design_velocity_m_s)]},
             'catalogs':{'absorber':absorber,'tube':tube,'cover1':covers[0],
-                        'cover2':covers[1] if len(covers)>1 else None,'insulation':insulation,
+                        'cover2':covers[1] if len(covers)>1 else None,'insulation':insulation,'side_insulation':side_insulation,
                         'adhesive':adhesive,'connection':connections},
             'model_notes':{'cover_model':'legacy-equivalent for one cover; engineering effective-property approximation for two covers',
                            'cover_gap_used':False,
@@ -228,7 +238,8 @@ def format_report(result):
     add('Tube OD / ID       : %.3f / %.3f mm'%(1000*_f(c['tube'],'od_m'),1000*_f(c['tube'],'id_m')))
     add('Tube wall          : %.3f mm'%(1000*r['tube_wall_m']))
     add('Absorber           : %s'%c['absorber'].get('name',''))
-    add('Insulation         : %s, %.1f mm'%(c['insulation'].get('name',''),1000*r['insulation_thickness_m']))
+    add('Back insulation    : %s, %.1f mm'%(c['insulation'].get('name',''),1000*r['insulation_thickness_m']))
+    add('Side insulation    : %s, %.1f mm'%(c['side_insulation'].get('name',''),1000*r['side_insulation_thickness_m']))
     add('Adhesive           : %s, k=%.4f W/m.K'%(c['adhesive'].get('name',''),r['adhesive_k_W_mK']))
     add('Covers             : %d'%r['cover_count'])
     add('Cover 1            : %s'%c['cover1'].get('name',''))

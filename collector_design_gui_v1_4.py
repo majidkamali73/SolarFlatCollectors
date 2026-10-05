@@ -60,14 +60,14 @@ class App(tk.Tk):
         self.rows={n:catalog(n) for n in ['absorbers','tubes','covers','insulation','adhesives','connection_types']}
         p=ttk.LabelFrame(self.tab2,text='Material selection'); p.pack(fill='x')
         self.abs=self.combo(p,'Absorber',self.rows['absorbers'],0,0); self.tube=self.combo(p,'Tube',self.rows['tubes'],1,0)
-        self.ins=self.combo(p,'Back insulation',self.rows['insulation'],2,0); self.adh=self.combo(p,'Adhesive',self.rows['adhesives'],3,0)
-        self.conn=self.combo(p,'Tube/plate connection',self.rows['connection_types'],4,0)
+        self.ins=self.combo(p,'Back insulation',self.rows['insulation'],2,0); self.side_ins=self.combo(p,'Side insulation',self.rows['insulation'],3,0); self.adh=self.combo(p,'Adhesive',self.rows['adhesives'],4,0)
+        self.conn=self.combo(p,'Tube/plate connection',self.rows['connection_types'],5,0)
         c=ttk.LabelFrame(self.tab2,text='Covers and layers'); c.pack(fill='x',pady=8)
         self.cover_count=tk.IntVar(value=1); ttk.Label(c,text='Number of covers').grid(row=0,column=0,sticky='w',padx=6,pady=4)
         ttk.Combobox(c,textvariable=self.cover_count,values=[1,2],state='readonly',width=8).grid(row=0,column=1,sticky='w',padx=6,pady=4)
         self.c1=self.combo(c,'Cover 1',self.rows['covers'],1,0); self.c2=self.combo(c,'Cover 2',self.rows['covers'],2,0)
         self.cover_gap=self.field(c,'Gap between covers [mm]',12,3,0); self.c2.configure(state='disabled'); self.cover_count.trace('w',self.toggle2)
-        self.ins_th=self.field(c,'Insulation thickness [mm]',40,4,0); self.adh_th=self.field(c,'Adhesive thickness [mm]',0.5,4,2); self.adh_k=self.field(c,'Adhesive k [W/m·K]',0.2,5,0)
+        self.ins_th=self.field(c,'Back insulation thickness [mm]',40,4,0); self.side_ins_th=self.field(c,'Side insulation thickness [mm]',40,5,2); self.adh_th=self.field(c,'Adhesive thickness [mm]',0.5,4,2); self.adh_k=self.field(c,'Adhesive k [W/m·K]',0.2,5,0)
     def _costs(self):
         p=ttk.LabelFrame(self.tab3,text='Prices'); p.pack(fill='x')
         self.pt=self.field(p,'Tube [currency/m]',1,0,0); self.pa=self.field(p,'Absorber [currency/m²]',1,0,2); self.pg=self.field(p,'Cover [currency/m²]',1,1,0); self.pi=self.field(p,'Insulation [currency/m²]',1,1,2); self.ph=self.field(p,'Header [currency/m]',0,2,0); self.pj=self.field(p,'Connection each',0,2,2)
@@ -103,7 +103,7 @@ class App(tk.Tk):
             c2=self.c2.get() if self.cover_count.get()==2 else None
             r=design_collector(float(self.q.get()),float(self.tfi.get()),float(self.ta.get()),float(self.I.get()),float(self.wind.get()),float(self.beta.get()),
                 absorber_id=self.abs.get(),tube_id=self.tube.get(),cover1_id=self.c1.get(),cover2_id=c2,cover_gap_m=float(self.cover_gap.get())/1000,
-                insulation_id=self.ins.get(),insulation_thickness_m=float(self.ins_th.get())/1000,adhesive_id=self.adh.get(),adhesive_k_W_mK=float(self.adh_k.get()),adhesive_thickness_m=float(self.adh_th.get())/1000,
+                insulation_id=self.ins.get(),insulation_thickness_m=float(self.ins_th.get())/1000,side_insulation_id=self.side_ins.get(),side_insulation_thickness_m=float(self.side_ins_th.get())/1000,adhesive_id=self.adh.get(),adhesive_k_W_mK=float(self.adh_k.get()),adhesive_thickness_m=float(self.adh_th.get())/1000,
                 connection_type=self.conn.get(),mdot_total=float(self.mdot.get()),flow_mode=self.flow_mode.get(),design_velocity_m_s=float(self.flow_speed.get()),
                 velocity_values=self._velocity_values(),objective=self.obj.get(),tube_price_per_m=float(self.pt.get()),absorber_price_per_m2=float(self.pa.get()),cover_price_per_m2=float(self.pg.get()),insulation_price_per_m2=float(self.pi.get()),header_price_per_m=float(self.ph.get()),connection_price_each=float(self.pj.get()),max_dp_Pa=float(self.maxdp.get()),max_L1=float(self.maxL1.get()),max_L2=float(self.maxL2.get()),max_nonuniformity_percent=float(self.maxnu.get()),N_values=range(8,21),spacing_values=(.06,.08,.10,.12,.14,.16),solver_options={'nx':12,'ny_per_gap':2,'max_outer':12})
             self.text.delete('1.0','end'); self.text.insert('1.0',format_report(r)); self.text.insert('end','\n\nPARETO CANDIDATES\n------------------\n')
