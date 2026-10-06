@@ -253,12 +253,13 @@ def coupled_case(mdot_total=0.1, N=10, w=0.10, L1=3.0,
     side_delta = deltab if side_insulation_thickness_m is None else side_insulation_thickness_m
     if side_k <= 0 or side_delta <= 0:
         raise ValueError("Side insulation conductivity and thickness must be positive.")
-    # Edge loss: (k/thickness) of the side insulation over the full
-    # perimeter 2*(L1+L2) and the edge height L3, referred to the absorber
-    # area. L3 is the box height, set by the back insulation. The legacy
-    # relation used (L1+L2), i.e. half the perimeter.
+    # Edge loss, legacy relation: conduction through the side insulation
+    # over the full perimeter 2*(L1+L2) and the edge height L3, with the
+    # mean temperature drop taken as half of plate minus ambient; the two
+    # factors cancel to (L1+L2). L3 is the box height, set by the back
+    # insulation.
     L3 = deltab + M * 0.03 + 0.01
-    Us = (2.0 * (L1 + L2) * L3 * side_k) / (L1 * L2 * side_delta)
+    Us = ((L1 + L2) * L3 * side_k) / (L1 * L2 * side_delta)
 
     Tf_prop = Tfi
     rho, mu, cp, k, hyd, flows, tube_data = _fluid_state(
@@ -428,7 +429,7 @@ def coupled_case_fast(mdot_total=0.1, N=10, w=0.10, L1=3.0,
     if side_k<=0 or side_delta<=0:
         raise ValueError('Side insulation conductivity and thickness must be positive.')
     L3=deltab+M*.03+.01
-    Us=(2.0*(L1+L2)*L3*side_k)/(L1*L2*side_delta)
+    Us=((L1+L2)*L3*side_k)/(L1*L2*side_delta)
     Tf_prop=Tfi
     rho,mu,cp,k,hyd,flows,tube_data=_fluid_state(Tf_prop,mdot_total,N,di,L1,w,Dh_ratio*di,connection_fraction,K_branch_in,K_branch_out)
     tube_rows=[min(range(ny),key=lambda j:abs((j+.5)*dy-(i+.5)*w)) for i in range(N)]
