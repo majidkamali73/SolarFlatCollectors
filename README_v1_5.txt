@@ -15,3 +15,4 @@ Corrections after review:
 - Cover infrared emissivity now comes from the emissivity column of data/covers.csv (default 0.88 when the model is called directly). The former 1 - R - tau estimate gave about 0.08 for glass and under-predicted top loss.
 - Two covers: the model applies tau**M, so the engine now passes the per-cover (geometric mean) transmittance; the second cover is no longer applied twice.
 - Side insulation material and thickness are separate inputs in the engine and the GUI. This is an engineering extension, not an original BASIC input; when not given, the back insulation is used for the edges.
+- Edge loss now uses the full perimeter 2*(L1+L2); the legacy relation used (L1+L2). The edge height L3 is set by the back-insulation thickness, and the side-insulation thickness appears only in the conduction path.

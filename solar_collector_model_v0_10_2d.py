@@ -195,11 +195,12 @@ def coupled_case(mdot_total=0.1, N=10, w=0.10, L1=3.0,
     side_delta = deltab if side_insulation_thickness_m is None else side_insulation_thickness_m
     if side_k <= 0 or side_delta <= 0:
         raise ValueError("Side insulation conductivity and thickness must be positive.")
-    # Engineering extension: independent side insulation. The edge-path
-    # width uses side thickness in place of the old shared back-insulation
-    # thickness. This is not an original BASIC relation.
-    L3 = side_delta + M * 0.03 + 0.01
-    Us = ((L1 + L2) * L3 * side_k) / (L1 * L2 * side_delta)
+    # Edge loss: (k/thickness) of the side insulation over the full
+    # perimeter 2*(L1+L2) and the edge height L3, referred to the absorber
+    # area. L3 is the box height, set by the back insulation. The legacy
+    # relation used (L1+L2), i.e. half the perimeter.
+    L3 = deltab + M * 0.03 + 0.01
+    Us = (2.0 * (L1 + L2) * L3 * side_k) / (L1 * L2 * side_delta)
 
     hyd = solve_header_distribution(mdot_total, N, di, rho, mu, L1, w,
                                     Dh_ratio * di, connection_fraction,
@@ -359,8 +360,8 @@ def coupled_case_fast(mdot_total=0.1, N=10, w=0.10, L1=3.0,
     side_delta=deltab if side_insulation_thickness_m is None else side_insulation_thickness_m
     if side_k<=0 or side_delta<=0:
         raise ValueError('Side insulation conductivity and thickness must be positive.')
-    L3=side_delta+M*.03+.01
-    Us=((L1+L2)*L3*side_k)/(L1*L2*side_delta)
+    L3=deltab+M*.03+.01
+    Us=(2.0*(L1+L2)*L3*side_k)/(L1*L2*side_delta)
     hyd=solve_header_distribution(mdot_total,N,di,rho,mu,L1,w,Dh_ratio*di,connection_fraction,connection_fraction,K_branch_in,K_branch_out)
     flows=hyd['tube_flows']
     tube_data=[thermal_tube(m,di,rho,mu,k,cp) for m in flows]
