@@ -9,6 +9,10 @@ if HERE not in sys.path: sys.path.insert(0,HERE)
 from solar_collector_model_v0_10_2d import solve_L1_for_q_fast, water_properties
 
 
+class DesignCancelled(Exception):
+    pass
+
+
 def read_catalog(name):
     path=os.path.join(HERE,'data',name+'.csv')
     with open(path,'r',newline='') as f:
@@ -74,7 +78,10 @@ def design_collector(heat_required,inlet_temperature,ambient_temperature,
                      objective='min_cost',tube_price_per_m=None,
                      absorber_price_per_m2=None,cover_price_per_m2=None,
                      header_price_per_m=0.0,connection_price_each=0.0,
-                     insulation_price_per_m2=None,max_dp_Pa=None,solver_options=None):
+                     insulation_price_per_m2=None,max_dp_Pa=None,solver_options=None,
+                     progress=None,should_stop=None):
+    # progress(done,total) is called before every candidate; should_stop()
+    # returning True aborts the scan with DesignCancelled.
     if fluid.lower()!='water':
         raise ValueError('Current validated fluid model: water only.')
     if heat_required<=0 or solar_irradiance<=0:
@@ -158,10 +165,17 @@ def design_collector(heat_required,inlet_temperature,ambient_temperature,
     else:
         speed_values=tuple(float(v) for v in velocity_values)
 
+    N_values=list(N_values); spacing_values=list(spacing_values)
+    total=len(N_values)*len(spacing_values)*len(speed_values)
     for N in N_values:
         for w in spacing_values:
             for target_speed in speed_values:
+                if should_stop is not None and should_stop():
+                    raise DesignCancelled('Calculation stopped.')
+                if progress is not None: progress(attempted,total)
                 attempted+=1
+                # Width is fixed by N and w, so too-wide layouts need no solve.
+                if N*w>max_L2: continue
                 if target_speed is None:
                     mdot_here=float(mdot_total)
                 else:
@@ -170,7 +184,7 @@ def design_collector(heat_required,inlet_temperature,ambient_temperature,
                     mdot_here=rho_ref*N*tube_area*target_speed
                 try:
                     r=solve_L1_for_q_fast(
-                        mdot_total=mdot_here,N=N,w=w,q_target=heat_required,
+                        mdot_total=mdot_here,N=N,w=w,q_target=heat_required,L1_limit=max_L1,
                         di=di,do=do,plate_k=plate_k,plate_delta=plate_delta,
                         adhesive_k=model_adh_k,adhesive_delta=model_adh_delta,
                         insulation_k=ins_k,deltab=ins_delta,

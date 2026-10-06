@@ -16,3 +16,5 @@ Corrections after review:
 - Two covers: the model applies tau**M, so the engine now passes the per-cover (geometric mean) transmittance; the second cover is no longer applied twice.
 - Side insulation material and thickness are separate inputs in the engine and the GUI. This is an engineering extension, not an original BASIC input; when not given, the back insulation is used for the edges.
 - Edge loss now uses the full perimeter 2*(L1+L2); the legacy relation used (L1+L2). The edge height L3 is set by the back-insulation thickness, and the side-insulation thickness appears only in the conduction path.
+- Speed: the plate equations are solved line by line (exact tridiagonal solve across the tubes), header losses use running sums, the collector length is found by false position, and layouts wider than the limit are skipped before solving. Results are unchanged within the solver tolerance.
+- GUI: the calculation runs in a background thread, so the window stays responsive; the status bar shows progress and a Stop button cancels the run.

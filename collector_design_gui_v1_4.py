@@ -2,8 +2,8 @@
 # Python 3.7.2 / standard library only.
 import tkinter as tk
 from tkinter import ttk, messagebox, filedialog
-import os
-from collector_design_engine_v1_3 import design_collector, catalog, format_report, pareto_candidates
+import os, threading
+from collector_design_engine_v1_3 import design_collector, catalog, format_report, pareto_candidates, DesignCancelled
 
 class App(tk.Tk):
     def __init__(self):
@@ -38,7 +38,9 @@ class App(tk.Tk):
         self.status=ttk.Label(bottom,text='Ready.',style='Hint.TLabel'); self.status.pack(side='left')
         ttk.Button(bottom,text='Open data folder',command=self.open_data).pack(side='right',padx=4)
         ttk.Button(bottom,text='Save report',command=self.save_report).pack(side='right',padx=4)
-        ttk.Button(bottom,text='OPTIMIZE',style='Run.TButton',command=self.run).pack(side='right',padx=4)
+        self.stop_btn=ttk.Button(bottom,text='Stop',command=self.stop,state='disabled'); self.stop_btn.pack(side='right',padx=4)
+        self.run_btn=ttk.Button(bottom,text='OPTIMIZE',style='Run.TButton',command=self.run); self.run_btn.pack(side='right',padx=4)
+        self._job=None; self._stop=threading.Event()
         out=ttk.LabelFrame(root,text='Results'); out.pack(fill='both',expand=True,pady=(8,0))
         self.text=tk.Text(out,font=('Consolas',9),wrap='none'); self.text.pack(side='left',fill='both',expand=True)
         sb=ttk.Scrollbar(out,orient='vertical',command=self.text.yview); sb.pack(side='right',fill='y'); self.text.configure(yscrollcommand=sb.set)
@@ -98,17 +100,42 @@ class App(tk.Tk):
             vals.append(round(v,8)); v+=step
         return tuple(vals)
     def run(self):
+        # The scan runs in a worker thread so the window stays responsive;
+        # all widget access stays in the main thread.
+        if self._job is not None: return
         try:
-            self.status.config(text='Calculating...'); self.update_idletasks()
             c2=self.c2.get() if self.cover_count.get()==2 else None
-            r=design_collector(float(self.q.get()),float(self.tfi.get()),float(self.ta.get()),float(self.I.get()),float(self.wind.get()),float(self.beta.get()),
+            args,kwargs=self._collect(float(self.q.get()),float(self.tfi.get()),float(self.ta.get()),float(self.I.get()),float(self.wind.get()),float(self.beta.get()),
                 absorber_id=self.abs.get(),tube_id=self.tube.get(),cover1_id=self.c1.get(),cover2_id=c2,cover_gap_m=float(self.cover_gap.get())/1000,
                 insulation_id=self.ins.get(),insulation_thickness_m=float(self.ins_th.get())/1000,side_insulation_id=self.side_ins.get(),side_insulation_thickness_m=float(self.side_ins_th.get())/1000,adhesive_id=self.adh.get(),adhesive_k_W_mK=float(self.adh_k.get()),adhesive_thickness_m=float(self.adh_th.get())/1000,
                 connection_type=self.conn.get(),mdot_total=float(self.mdot.get()),flow_mode=self.flow_mode.get(),design_velocity_m_s=float(self.flow_speed.get()),
                 velocity_values=self._velocity_values(),objective=self.obj.get(),tube_price_per_m=float(self.pt.get()),absorber_price_per_m2=float(self.pa.get()),cover_price_per_m2=float(self.pg.get()),insulation_price_per_m2=float(self.pi.get()),header_price_per_m=float(self.ph.get()),connection_price_each=float(self.pj.get()),max_dp_Pa=float(self.maxdp.get()),max_L1=float(self.maxL1.get()),max_L2=float(self.maxL2.get()),max_nonuniformity_percent=float(self.maxnu.get()),N_values=range(8,21),spacing_values=(.06,.08,.10,.12,.14,.16),solver_options={'nx':12,'ny_per_gap':2,'max_outer':12})
-            self.text.delete('1.0','end'); self.text.insert('1.0',format_report(r)); self.text.insert('end','\n\nPARETO CANDIDATES\n------------------\n')
-            for x in pareto_candidates(r.get('feasible_candidates',[])): self.text.insert('end','N=%d  w=%.3f  v=%.2f  flow=%.2f L/min  cost=%.3f  eta=%.3f%%  conn=%s\n'%(x['N'],x['w_m'],x.get('design_velocity_m_s',0.0),x.get('flow_L_min',0.0),x['cost'],100*x['efficiency'],x['connection_type']))
-            self.status.config(text='Calculation completed.')
         except Exception as e:
-            self.status.config(text='Error.'); messagebox.showerror('Design error',str(e))
+            self.status.config(text='Error.'); messagebox.showerror('Design error',str(e)); return
+        self._stop.clear(); job={'done':0,'total':0}; self._job=job
+        def progress(done,total): job['done']=done; job['total']=total
+        def work():
+            try: job['result']=design_collector(*args,progress=progress,should_stop=self._stop.is_set,**kwargs)
+            except Exception as e: job['error']=e
+        self.run_btn.config(state='disabled'); self.stop_btn.config(state='normal'); self.status.config(text='Calculating...')
+        threading.Thread(target=work,daemon=True).start(); self.after(100,self._poll)
+    def _collect(self,*args,**kwargs): return args,kwargs
+    def stop(self):
+        self._stop.set(); self.status.config(text='Stopping...')
+    def _poll(self):
+        job=self._job
+        if job is None: return
+        if 'result' not in job and 'error' not in job:
+            if job['total'] and not self._stop.is_set(): self.status.config(text='Calculating... %d of %d candidates'%(job['done'],job['total']))
+            self.after(100,self._poll); return
+        self._job=None; self.run_btn.config(state='normal'); self.stop_btn.config(state='disabled')
+        if 'error' in job:
+            e=job['error']
+            if isinstance(e,DesignCancelled): self.status.config(text='Stopped.')
+            else: self.status.config(text='Error.'); messagebox.showerror('Design error',str(e))
+            return
+        r=job['result']
+        self.text.delete('1.0','end'); self.text.insert('1.0',format_report(r)); self.text.insert('end','\n\nPARETO CANDIDATES\n------------------\n')
+        for x in pareto_candidates(r.get('feasible_candidates',[])): self.text.insert('end','N=%d  w=%.3f  v=%.2f  flow=%.2f L/min  cost=%.3f  eta=%.3f%%  conn=%s\n'%(x['N'],x['w_m'],x.get('design_velocity_m_s',0.0),x.get('flow_L_min',0.0),x['cost'],100*x['efficiency'],x['connection_type']))
+        self.status.config(text='Calculation completed.')
 if __name__=='__main__': App().mainloop()

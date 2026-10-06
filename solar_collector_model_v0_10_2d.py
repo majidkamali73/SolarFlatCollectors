@@ -53,47 +53,58 @@ def header_section_dp(mdot, D, rho, mu, length, rel_roughness=0.0):
     f, _ = friction_factor(Re, rel_roughness)
     return f * (length / D) * 0.5 * rho * V ** 2
 
-def _header_path_dp(branch_index, flows, connection_fraction, spacing,
-                    Dh, rho, mu, rel_roughness=0.0):
+def _header_dps(flows, connection_fraction, spacing, Dh, rho, mu,
+                rel_roughness=0.0):
+    # Header pressure loss from the connection point to every branch.
+    # Each header segment carries the flow of all branches beyond it.
     N = len(flows)
+    out = [0.0] * N
     if N <= 1:
-        return 0.0
-    x = [i * spacing for i in range(N)]
+        return out
     xc = connection_fraction * (N - 1) * spacing
-    xb = x[branch_index]
-    if abs(xb - xc) < 1e-14:
-        return 0.0
-    if xb > xc:
-        indices = [i for i in range(N) if x[i] >= xc and x[i] <= xb]
-        indices.sort(key=lambda i: x[i])
-        direction = 1
-    else:
-        indices = [i for i in range(N) if x[i] <= xc and x[i] >= xb]
-        indices.sort(key=lambda i: x[i], reverse=True)
-        direction = -1
+    beyond = [0.0] * N
+    total = 0.0
+    for j in range(N - 1, -1, -1):
+        total += flows[j]
+        beyond[j] = total
     dp = 0.0
-    for pos, j in enumerate(indices):
-        xj = x[j]
-        x0 = xc if pos == 0 else x[indices[pos - 1]]
-        seg_len = abs(xj - x0)
-        if direction > 0:
-            remaining = sum(flows[k] for k in range(N) if x[k] >= xj - 1e-14)
-        else:
-            remaining = sum(flows[k] for k in range(N) if x[k] <= xj + 1e-14)
-        if seg_len > 0.0 and remaining > 0.0:
-            dp += header_section_dp(remaining, Dh, rho, mu, seg_len, rel_roughness)
-        if j == branch_index:
-            break
-    return dp
+    prev = xc
+    for j in range(N):
+        xj = j * spacing
+        if xj < xc:
+            continue
+        if xj - prev > 0.0 and beyond[j] > 0.0:
+            dp += header_section_dp(beyond[j], Dh, rho, mu, xj - prev, rel_roughness)
+        prev = xj
+        if xj - xc >= 1e-14:
+            out[j] = dp
+    total = 0.0
+    for j in range(N):
+        total += flows[j]
+        beyond[j] = total
+    dp = 0.0
+    prev = xc
+    for j in range(N - 1, -1, -1):
+        xj = j * spacing
+        if xj > xc:
+            continue
+        if prev - xj > 0.0 and beyond[j] > 0.0:
+            dp += header_section_dp(beyond[j], Dh, rho, mu, prev - xj, rel_roughness)
+        prev = xj
+        if xc - xj >= 1e-14:
+            out[j] = dp
+    return out
 
 def _path_values(flows, di, Dh, rho, mu, L_tube, spacing,
                  inlet_fraction, outlet_fraction, K_in, K_out,
                  rel_roughness):
     paths = []
     N = len(flows)
+    dp_in = _header_dps(flows, inlet_fraction, spacing, Dh, rho, mu, rel_roughness)
+    dp_out = _header_dps(flows, outlet_fraction, spacing, Dh, rho, mu, rel_roughness)
     for i in range(N):
-        dp_hi = _header_path_dp(i, flows, inlet_fraction, spacing, Dh, rho, mu, rel_roughness)
-        dp_ho = _header_path_dp(i, flows, outlet_fraction, spacing, Dh, rho, mu, rel_roughness)
+        dp_hi = dp_in[i]
+        dp_ho = dp_out[i]
         dp_t, V, Re, reg = tube_dp(flows[i], di, rho, mu, L_tube, rel_roughness)
         dp_b = (K_in + K_out) * 0.5 * rho * V ** 2
         paths.append((dp_hi + dp_t + dp_ho + dp_b, dp_hi, dp_ho, dp_t, dp_b, V, Re, reg))
@@ -444,34 +455,49 @@ def coupled_case_fast(mdot_total=0.1, N=10, w=0.10, L1=3.0,
         if props_updated:
             Tf_prop=Tf_mean
             rho,mu,cp,k,hyd,flows,tube_data=_fluid_state(Tf_prop,mdot_total,N,di,L1,w,Dh_ratio*di,connection_fraction,K_branch_in,K_branch_out)
-        # Gauss-Seidel solution of the 2-D plate conduction equation.
+        # Plate conduction: each x-station is a tridiagonal system in y and is
+        # solved exactly; the stations are swept until the x-coupling settles.
         Gx=plate_k*plate_delta*dy/dx
         Gy=plate_k*plate_delta*dx/dy
+        base=UL*cell_area; src=S*cell_area+UL*cell_area*Ta
+        gc_row=[0.0]*ny; gt=[[0.0]*ny for _ in range(nx)]
+        for ti,row in enumerate(tube_rows):
+            hf=tube_data[ti][4]
+            Gp=1/(1/(hf*math.pi*di)+adhesive_delta/(adhesive_k*math.pi*do))
+            gc=flows[ti]*cp*(1-math.exp(-Gp*dx/(flows[ti]*cp)))
+            gc_row[row]+=gc
+            for ix in range(nx): gt[ix][row]+=gc*tube_tf[ti][ix]
+        # Elimination factors for a station with 0, 1 or 2 x-neighbours.
+        factors=[]
+        for n_side in (0,1,2):
+            inv=[0.0]*ny; up=[0.0]*ny; prev_up=0.0
+            for iy in range(ny):
+                diag=base+n_side*Gx+gc_row[iy]
+                if iy>0: diag+=Gy
+                if iy<ny-1: diag+=Gy
+                inv[iy]=1.0/(diag-Gy*prev_up)
+                prev_up=Gy*inv[iy]; up[iy]=prev_up
+            factors.append((inv,up))
+        fwd=[0.0]*ny
         for sweep in range(350):
             sweep_change=0.0
             for ix in range(nx):
+                left=T[ix-1] if ix>0 else None
+                right=T[ix+1] if ix<nx-1 else None
+                inv,up=factors[(left is not None)+(right is not None)]
+                g=gt[ix]; acc=0.0
                 for iy in range(ny):
-                    diag=UL*cell_area
-                    rhs=S*cell_area+UL*cell_area*Ta
-                    if ix>0:
-                        diag+=Gx; rhs+=Gx*T[ix-1][iy]
-                    if ix<nx-1:
-                        diag+=Gx; rhs+=Gx*T[ix+1][iy]
-                    if iy>0:
-                        diag+=Gy; rhs+=Gy*T[ix][iy-1]
-                    if iy<ny-1:
-                        diag+=Gy; rhs+=Gy*T[ix][iy+1]
-                    for ti,row in enumerate(tube_rows):
-                        if row==iy:
-                            hf=tube_data[ti][4]
-                            Gp=1/(1/(hf*math.pi*di)+adhesive_delta/(adhesive_k*math.pi*do))
-                            a=Gp*dx/(flows[ti]*cp)
-                            gc=flows[ti]*cp*(1-math.exp(-a))
-                            diag+=gc; rhs+=gc*tube_tf[ti][ix]
-                    newT=rhs/diag
-                    d=abs(newT-T[ix][iy])
+                    rhs=src+g[iy]
+                    if left is not None: rhs+=Gx*left[iy]
+                    if right is not None: rhs+=Gx*right[iy]
+                    acc=(rhs+Gy*acc)*inv[iy]
+                    fwd[iy]=acc
+                row=T[ix]; newT=0.0
+                for iy in range(ny-1,-1,-1):
+                    newT=fwd[iy]+up[iy]*newT if iy<ny-1 else fwd[iy]
+                    d=abs(newT-row[iy])
                     if d>sweep_change: sweep_change=d
-                    T[ix][iy]=newT
+                    row[iy]=newT
             if sweep_change<2e-7: break
         for ix in range(nx):
             for iy in range(ny):
@@ -489,14 +515,33 @@ def coupled_case_fast(mdot_total=0.1, N=10, w=0.10, L1=3.0,
     absorbed=S*Ap; losses=sum(UL*(T[ix][iy]-Ta)*cell_area for ix in range(nx) for iy in range(ny)); bal=(absorbed-losses-q)/max(abs(absorbed),1.)
     return {'N':N,'w_m':w,'L1_m':L1,'L2_m':L2,'Ap_m2':Ap,'q_W':q,'efficiency':eta,'UL_W_m2K':UL,'Tavg_C':Tavg,'Tmax_C':Tmax,'Tmin_C':Tmin,'Tfo_mean_C':sum(Tfo)/N,'Tfo_min_C':min(Tfo),'Tfo_max_C':max(Tfo),'Re_mean':sum(x[1] for x in tube_data)/N,'hf_mean':sum(x[4] for x in tube_data)/N,'flow_nonuniformity':hyd['flow_nonuniformity'],'dp_system_Pa':hyd['dp_path_Pa'],'pump_power_W':pump,'balance_error_fraction':bal,'tube_flows':flows,'tube_Tfo':Tfo,'plate_temperature_C':T,'iterations_outer':outer+1,'water_temperature_C':Tf_prop,'water_density_kg_m3':rho,'water_viscosity_Pa_s':mu,'water_cp_J_kgK':cp,'water_k_W_mK':k}
 
-def solve_L1_for_q_fast(mdot_total,N,w,q_target,L1_lo=1.0,L1_hi=5.0,**kwargs):
-    rlo=coupled_case_fast(mdot_total,N,w,L1_lo,**kwargs); rhi=coupled_case_fast(mdot_total,N,w,L1_hi,**kwargs)
-    while rhi['q_W']<q_target:
-        L1_hi*=1.4; rhi=coupled_case_fast(mdot_total,N,w,L1_hi,**kwargs)
-        if L1_hi>15: raise ValueError('Target duty not reached')
+def solve_L1_for_q_fast(mdot_total,N,w,q_target,L1_lo=1.0,L1_hi=5.0,L1_limit=None,q_tol=0.1,**kwargs):
+    # Shortest length that delivers q_target, never shorter than L1_lo.
+    # L1_limit, when given, is the longest acceptable collector: the search
+    # stops at once if even that length cannot deliver the duty.
+    rlo=coupled_case_fast(mdot_total,N,w,L1_lo,**kwargs)
     if rlo['q_W']>=q_target: return rlo
-    for _ in range(14):
-        mid=(L1_lo+L1_hi)/2; rm=coupled_case_fast(mdot_total,N,w,mid,**kwargs)
-        if rm['q_W']<q_target: L1_lo=mid
-        else: L1_hi=mid
-    return coupled_case_fast(mdot_total,N,w,(L1_lo+L1_hi)/2,**kwargs)
+    if L1_limit is not None:
+        if L1_limit<=L1_lo: raise ValueError('Target duty not reached')
+        L1_hi=L1_limit; rhi=coupled_case_fast(mdot_total,N,w,L1_hi,**kwargs)
+        if rhi['q_W']<q_target: raise ValueError('Target duty not reached')
+    else:
+        rhi=coupled_case_fast(mdot_total,N,w,L1_hi,**kwargs)
+        while rhi['q_W']<q_target:
+            L1_hi*=1.4; rhi=coupled_case_fast(mdot_total,N,w,L1_hi,**kwargs)
+            if L1_hi>15: raise ValueError('Target duty not reached')
+    # False position with the Illinois correction; rhi always meets the duty.
+    flo=rlo['q_W']-q_target; fhi=rhi['q_W']-q_target; side=0
+    for _ in range(40):
+        if rhi['q_W']-q_target<=q_tol or L1_hi-L1_lo<=1e-6: break
+        mid=L1_hi-fhi*(L1_hi-L1_lo)/(fhi-flo)
+        rm=coupled_case_fast(mdot_total,N,w,mid,**kwargs); fm=rm['q_W']-q_target
+        if fm<0:
+            L1_lo=mid; flo=fm
+            if side<0: fhi*=0.5
+            side=-1
+        else:
+            L1_hi=mid; fhi=fm; rhi=rm
+            if side>0: flo*=0.5
+            side=1
+    return rhi
