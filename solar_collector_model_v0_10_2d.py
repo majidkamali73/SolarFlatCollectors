@@ -163,6 +163,54 @@ def thermal_tube(mdot, di, rho, mu, k, cp):
     hf = Nu * k / di
     return V, Re, Pr, Nu, hf, regime
 
+# ---------------- water properties ----------------
+# Saturated liquid water, 0-100 C, in 5 K steps (standard property-table
+# values): density kg/m3, specific heat J/kg.K, conductivity W/m.K,
+# dynamic viscosity Pa.s. Linear interpolation; clamped outside the range.
+_WATER_TABLE = (
+    (0.0, 999.8, 4217.0, 0.561, 1.792e-3),
+    (5.0, 999.9, 4205.0, 0.571, 1.519e-3),
+    (10.0, 999.7, 4194.0, 0.580, 1.307e-3),
+    (15.0, 999.1, 4185.0, 0.589, 1.138e-3),
+    (20.0, 998.0, 4182.0, 0.598, 1.002e-3),
+    (25.0, 997.0, 4180.0, 0.607, 0.891e-3),
+    (30.0, 996.0, 4178.0, 0.615, 0.798e-3),
+    (35.0, 994.0, 4178.0, 0.623, 0.720e-3),
+    (40.0, 992.1, 4179.0, 0.631, 0.653e-3),
+    (45.0, 990.1, 4180.0, 0.637, 0.596e-3),
+    (50.0, 988.1, 4181.0, 0.644, 0.547e-3),
+    (55.0, 985.2, 4183.0, 0.649, 0.504e-3),
+    (60.0, 983.3, 4185.0, 0.654, 0.467e-3),
+    (65.0, 980.4, 4187.0, 0.659, 0.433e-3),
+    (70.0, 977.5, 4190.0, 0.663, 0.404e-3),
+    (75.0, 974.7, 4193.0, 0.667, 0.378e-3),
+    (80.0, 971.8, 4197.0, 0.670, 0.355e-3),
+    (85.0, 968.1, 4201.0, 0.673, 0.333e-3),
+    (90.0, 965.3, 4206.0, 0.675, 0.315e-3),
+    (95.0, 961.5, 4212.0, 0.677, 0.297e-3),
+    (100.0, 957.9, 4217.0, 0.679, 0.282e-3),
+)
+
+def water_properties(T_C):
+    """Return (rho, mu, cp, k) of liquid water at T_C."""
+    T = min(max(T_C, _WATER_TABLE[0][0]), _WATER_TABLE[-1][0])
+    for lo, hi in zip(_WATER_TABLE[:-1], _WATER_TABLE[1:]):
+        if T <= hi[0]:
+            x = (T - lo[0]) / (hi[0] - lo[0])
+            rho, cp, k, mu = [lo[j] + x * (hi[j] - lo[j]) for j in range(1, 5)]
+            return rho, mu, cp, k
+
+def _fluid_state(Tf_C, mdot_total, N, di, L1, w, Dh, connection_fraction,
+                 K_branch_in, K_branch_out):
+    # Properties, header flow split and tube-side coefficients at Tf_C.
+    rho, mu, cp, k = water_properties(Tf_C)
+    hyd = solve_header_distribution(mdot_total, N, di, rho, mu, L1, w, Dh,
+                                    connection_fraction, connection_fraction,
+                                    K_branch_in, K_branch_out)
+    flows = hyd["tube_flows"]
+    tube_data = [thermal_tube(m, di, rho, mu, k, cp) for m in flows]
+    return rho, mu, cp, k, hyd, flows, tube_data
+
 # ---------------- coupled model ----------------
 def coupled_case(mdot_total=0.1, N=10, w=0.10, L1=3.0,
                  di=0.370*0.0254, do=0.500*0.0254,
@@ -177,7 +225,6 @@ def coupled_case(mdot_total=0.1, N=10, w=0.10, L1=3.0,
                  pump_efficiency=0.65, nx=36, ny_per_gap=5,
                  max_outer=35, max_plate=800, relax=0.55,
                  cover_emissivity=None):
-    rho, mu, cp, k = 998.0, 0.0004275, 4180.0, 0.60
     L2 = N * w
     Ap = L1 * L2
     dx = L1 / float(nx)
@@ -202,11 +249,10 @@ def coupled_case(mdot_total=0.1, N=10, w=0.10, L1=3.0,
     L3 = deltab + M * 0.03 + 0.01
     Us = (2.0 * (L1 + L2) * L3 * side_k) / (L1 * L2 * side_delta)
 
-    hyd = solve_header_distribution(mdot_total, N, di, rho, mu, L1, w,
-                                    Dh_ratio * di, connection_fraction,
-                                    connection_fraction, K_branch_in, K_branch_out)
-    flows = hyd["tube_flows"]
-    tube_data = [thermal_tube(m, di, rho, mu, k, cp) for m in flows]
+    Tf_prop = Tfi
+    rho, mu, cp, k, hyd, flows, tube_data = _fluid_state(
+        Tf_prop, mdot_total, N, di, L1, w, Dh_ratio * di,
+        connection_fraction, K_branch_in, K_branch_out)
 
     # Tube center positions; grid rows are assigned to the nearest center.
     ycenters = [(i + 0.5) * w for i in range(N)]
@@ -236,6 +282,15 @@ def coupled_case(mdot_total=0.1, N=10, w=0.10, L1=3.0,
                 a = Gprime * dx / mcp
                 e = math.exp(-a)
                 tube_tf[i][ix + 1] = Tp - (Tp - tube_tf[i][ix]) * e
+
+        # Water properties follow the mean fluid temperature.
+        Tf_mean = 0.5 * (Tfi + sum(flows[i] * tube_tf[i][-1] for i in range(N)) / mdot_total)
+        props_updated = abs(Tf_mean - Tf_prop) > 0.25
+        if props_updated:
+            Tf_prop = Tf_mean
+            rho, mu, cp, k, hyd, flows, tube_data = _fluid_state(
+                Tf_prop, mdot_total, N, di, L1, w, Dh_ratio * di,
+                connection_fraction, K_branch_in, K_branch_out)
 
         # Gauss-Seidel plate solve with the fluid temperatures held fixed.
         Gx = plate_k * plate_delta * dy / dx
@@ -271,7 +326,7 @@ def coupled_case(mdot_total=0.1, N=10, w=0.10, L1=3.0,
                 break
 
         diff = max(abs(T[ix][iy] - old_T[ix][iy]) for ix in range(nx) for iy in range(ny))
-        if diff < 2e-5:
+        if diff < 2e-5 and not props_updated:
             break
 
     # Final fluid march and heat output.
@@ -310,7 +365,9 @@ def coupled_case(mdot_total=0.1, N=10, w=0.10, L1=3.0,
         "balance_error_fraction": balance_error,
         "tube_flows": flows, "tube_Tfo": Tfo,
         "plate_temperature_C": T,
-        "iterations_outer": outer + 1
+        "iterations_outer": outer + 1,
+        "water_temperature_C": Tf_prop, "water_density_kg_m3": rho,
+        "water_viscosity_Pa_s": mu, "water_cp_J_kgK": cp, "water_k_W_mK": k
     }
 
 def solve_L1_for_q(mdot_total, N, w, q_target, L1_lo=1.0, L1_hi=5.0, **kwargs):
@@ -350,7 +407,6 @@ def coupled_case_fast(mdot_total=0.1, N=10, w=0.10, L1=3.0,
                  max_outer=30, relax=0.6, cover_emissivity=None):
     # Pure-Python implementation: intentionally no NumPy/SciPy dependency.
     # This is compatible with stock Python 3.7.2 + IDLE.
-    rho, mu, cp, k = 998.0, 0.0004275, 4180.0, 0.60
     L2=N*w; Ap=L1*L2; dx=L1/float(nx); ny=max(N*ny_per_gap,N+2); dy=L2/float(ny)
     S=solar_I*(tau**M)*alpha; hw=5.7+3.8*wind
     fwind=(1-.04*hw+.0005*hw**2)*(1+.091*M); C=365.9*(1-.00883*beta+.0001298*beta**2)
@@ -362,9 +418,8 @@ def coupled_case_fast(mdot_total=0.1, N=10, w=0.10, L1=3.0,
         raise ValueError('Side insulation conductivity and thickness must be positive.')
     L3=deltab+M*.03+.01
     Us=(2.0*(L1+L2)*L3*side_k)/(L1*L2*side_delta)
-    hyd=solve_header_distribution(mdot_total,N,di,rho,mu,L1,w,Dh_ratio*di,connection_fraction,connection_fraction,K_branch_in,K_branch_out)
-    flows=hyd['tube_flows']
-    tube_data=[thermal_tube(m,di,rho,mu,k,cp) for m in flows]
+    Tf_prop=Tfi
+    rho,mu,cp,k,hyd,flows,tube_data=_fluid_state(Tf_prop,mdot_total,N,di,L1,w,Dh_ratio*di,connection_fraction,K_branch_in,K_branch_out)
     tube_rows=[min(range(ny),key=lambda j:abs((j+.5)*dy-(i+.5)*w)) for i in range(N)]
     T=[[Tfi for _ in range(ny)] for _ in range(nx)]
     tube_tf=[[Tfi for _ in range(nx+1)] for _ in range(N)]
@@ -383,6 +438,12 @@ def coupled_case_fast(mdot_total=0.1, N=10, w=0.10, L1=3.0,
             a=Gp*dx/mcp; e=math.exp(-a); tube_tf[i][0]=Tfi
             for ix in range(nx):
                 tube_tf[i][ix+1]=T[ix][tube_rows[i]]-(T[ix][tube_rows[i]]-tube_tf[i][ix])*e
+        # Water properties follow the mean fluid temperature.
+        Tf_mean=0.5*(Tfi+sum(flows[i]*tube_tf[i][-1] for i in range(N))/mdot_total)
+        props_updated=abs(Tf_mean-Tf_prop)>0.25
+        if props_updated:
+            Tf_prop=Tf_mean
+            rho,mu,cp,k,hyd,flows,tube_data=_fluid_state(Tf_prop,mdot_total,N,di,L1,w,Dh_ratio*di,connection_fraction,K_branch_in,K_branch_out)
         # Gauss-Seidel solution of the 2-D plate conduction equation.
         Gx=plate_k*plate_delta*dy/dx
         Gy=plate_k*plate_delta*dx/dy
@@ -416,7 +477,7 @@ def coupled_case_fast(mdot_total=0.1, N=10, w=0.10, L1=3.0,
             for iy in range(ny):
                 d=abs(T[ix][iy]-Tprev[ix][iy])
                 if d>max_change: max_change=d
-        if max_change<2e-5: break
+        if max_change<2e-5 and not props_updated: break
     # final fluid march and outputs
     q_t=[]; Tfo=[]
     for i in range(N):
@@ -426,7 +487,7 @@ def coupled_case_fast(mdot_total=0.1, N=10, w=0.10, L1=3.0,
     q=sum(q_t); eta=q/(Ap*solar_I); Tavg=sum(sum(row) for row in T)/(nx*ny); Tmax=max(max(row) for row in T); Tmin=min(min(row) for row in T)
     pump=hyd['dp_path_Pa']*(mdot_total/rho)/pump_efficiency
     absorbed=S*Ap; losses=sum(UL*(T[ix][iy]-Ta)*cell_area for ix in range(nx) for iy in range(ny)); bal=(absorbed-losses-q)/max(abs(absorbed),1.)
-    return {'N':N,'w_m':w,'L1_m':L1,'L2_m':L2,'Ap_m2':Ap,'q_W':q,'efficiency':eta,'UL_W_m2K':UL,'Tavg_C':Tavg,'Tmax_C':Tmax,'Tmin_C':Tmin,'Tfo_mean_C':sum(Tfo)/N,'Tfo_min_C':min(Tfo),'Tfo_max_C':max(Tfo),'Re_mean':sum(x[1] for x in tube_data)/N,'hf_mean':sum(x[4] for x in tube_data)/N,'flow_nonuniformity':hyd['flow_nonuniformity'],'dp_system_Pa':hyd['dp_path_Pa'],'pump_power_W':pump,'balance_error_fraction':bal,'tube_flows':flows,'tube_Tfo':Tfo,'plate_temperature_C':T,'iterations_outer':outer+1}
+    return {'N':N,'w_m':w,'L1_m':L1,'L2_m':L2,'Ap_m2':Ap,'q_W':q,'efficiency':eta,'UL_W_m2K':UL,'Tavg_C':Tavg,'Tmax_C':Tmax,'Tmin_C':Tmin,'Tfo_mean_C':sum(Tfo)/N,'Tfo_min_C':min(Tfo),'Tfo_max_C':max(Tfo),'Re_mean':sum(x[1] for x in tube_data)/N,'hf_mean':sum(x[4] for x in tube_data)/N,'flow_nonuniformity':hyd['flow_nonuniformity'],'dp_system_Pa':hyd['dp_path_Pa'],'pump_power_W':pump,'balance_error_fraction':bal,'tube_flows':flows,'tube_Tfo':Tfo,'plate_temperature_C':T,'iterations_outer':outer+1,'water_temperature_C':Tf_prop,'water_density_kg_m3':rho,'water_viscosity_Pa_s':mu,'water_cp_J_kgK':cp,'water_k_W_mK':k}
 
 def solve_L1_for_q_fast(mdot_total,N,w,q_target,L1_lo=1.0,L1_hi=5.0,**kwargs):
     rlo=coupled_case_fast(mdot_total,N,w,L1_lo,**kwargs); rhi=coupled_case_fast(mdot_total,N,w,L1_hi,**kwargs)

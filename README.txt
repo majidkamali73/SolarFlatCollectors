@@ -22,7 +22,7 @@ IMPORTANT MODEL STATUS
 - The current 2-D thermal model uses the adhesive resistance coupling for connection types 1 and 2; their detailed geometry-specific legacy F' equations remain a reference and are not silently claimed to be reproduced by the 2-D grid model.
 - For connection type 3, the current 2-D model uses a direct tube-to-plate coupling approximation.
 - Catalog numerical values marked example_engineering are placeholders and must be verified/replaced before engineering decisions.
-- Current fluid model is water only.
+- Current fluid model is water only. Density, viscosity, specific heat and conductivity are interpolated from a 0-100 C table at the mean fluid temperature.
 
 RUN
 1. Put all files in one folder.

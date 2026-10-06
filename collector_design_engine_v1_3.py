@@ -6,7 +6,7 @@
 import csv, os, sys, math
 HERE=os.path.dirname(os.path.abspath(__file__))
 if HERE not in sys.path: sys.path.insert(0,HERE)
-from solar_collector_model_v0_10_2d import solve_L1_for_q_fast
+from solar_collector_model_v0_10_2d import solve_L1_for_q_fast, water_properties
 
 
 def read_catalog(name):
@@ -148,7 +148,8 @@ def design_collector(heat_required,inlet_temperature,ambient_temperature,
     if insulation_price_per_m2 is None: insulation_price_per_m2=_f(insulation,'cost_per_m2')
 
     feasible=[]; attempted=0
-    rho_ref=998.0
+    # Design velocity and volume flow are referred to the inlet density.
+    rho_ref=water_properties(inlet_temperature)[0]
     tube_area=math.pi*di*di/4.0
     if flow_mode=='manual_flow':
         speed_values=(None,)
@@ -185,7 +186,7 @@ def design_collector(heat_required,inlet_temperature,ambient_temperature,
                 if max_dp_Pa is not None and r['dp_system_Pa']>max_dp_Pa: continue
                 tube_length=N*r['L1_m']
                 mean_speed=mdot_here/(rho_ref*N*tube_area)
-                re_mean=rho_ref*mean_speed*di/0.0004275
+                re_mean=r['Re_mean']
                 cost=(tube_length*tube_price_per_m + r['Ap_m2']*absorber_price_per_m2 +
                       r['Ap_m2']*cover_price_per_m2 + r['Ap_m2']*insulation_price_per_m2 +
                       2*r['L2_m']*header_price_per_m + N*connection_price_each)
@@ -247,7 +248,7 @@ def format_report(result):
     add('Cover gap          : %.1f mm'%(1000*r['cover_gap_m']))
     add(''); add('OPERATING / ENVIRONMENT'); add('Solar irradiance  : %.2f W/m2'%r['solar_irradiance_W_m2']); add('Collector tilt beta: %.2f deg from horizontal'%r['beta_deg']); add(''); add('GEOMETRY'); add('N tubes            : %d'%r['N']); add('Tube spacing       : %.3f m'%r['w_m']); add('Collector length   : %.3f m'%r['L1_m']); add('Collector width    : %.3f m'%r['L2_m']); add('Absorber area      : %.3f m2'%r['Ap_m2']); add('Total tube length  : %.3f m'%r['tube_length_m'])
     add(''); add('THERMAL'); add('Required heat      : %.2f W'%r['q_W']); add('Efficiency         : %.3f %%'%(100*r['efficiency'])); add('T plate max        : %.2f C'%r['Tmax_C']); add('T outlet mean      : %.2f C'%r['Tfo_mean_C']); add('Overall UL         : %.3f W/m2.K'%r['UL_W_m2K'])
-    add(''); add('FLOW / HYDRAULIC'); add('Flow mode          : %s'%r.get('flow_mode','manual_flow')); add('Mass flow          : %.5f kg/s  (%.3f L/min)'%(r.get('mdot_total_kg_s',0.0),r.get('flow_L_min',0.0))); add('Tube velocity      : %.3f m/s'%r.get('design_velocity_m_s',0.0)); add('Mean Reynolds      : %.0f'%r.get('mean_Re',0.0)); add(''); add('HYDRAULIC'); add('Pressure drop      : %.2f Pa'%r['dp_system_Pa']); add('Flow nonuniformity : %.3f %%'%(100*r['flow_nonuniformity'])); add('Pump power         : %.6f W'%r['pump_power_W'])
+    add(''); add('FLOW / HYDRAULIC'); add('Flow mode          : %s'%r.get('flow_mode','manual_flow')); add('Mass flow          : %.5f kg/s  (%.3f L/min)'%(r.get('mdot_total_kg_s',0.0),r.get('flow_L_min',0.0))); add('Tube velocity      : %.3f m/s'%r.get('design_velocity_m_s',0.0)); add('Mean Reynolds      : %.0f'%r.get('mean_Re',0.0)); add('Water properties   : at %.1f C mean fluid temperature, mu=%.3e Pa.s'%(r['water_temperature_C'],r['water_viscosity_Pa_s'])); add(''); add('HYDRAULIC'); add('Pressure drop      : %.2f Pa'%r['dp_system_Pa']); add('Flow nonuniformity : %.3f %%'%(100*r['flow_nonuniformity'])); add('Pump power         : %.6f W'%r['pump_power_W'])
     add(''); add('ECONOMIC'); add('Entered/model cost  : %.4f'%r['cost'])
     add(''); add('STATUS / MODEL NOTES'); add('Thermal requirement: PASS'); add('Geometry limits    : PASS'); add('Flow uniformity    : PASS')
     if result['model_notes']['cover_gap_used'] is False: add('Cover gap          : recorded, not yet active in legacy top-loss equation')
