@@ -223,186 +223,19 @@ def _fluid_state(Tf_C, mdot_total, N, di, L1, w, Dh, connection_fraction,
     return rho, mu, cp, k, hyd, flows, tube_data
 
 # ---------------- coupled model ----------------
-def coupled_case(mdot_total=0.1, N=10, w=0.10, L1=3.0,
-                 di=0.370*0.0254, do=0.500*0.0254,
-                 plate_k=237.0, plate_delta=0.0005,
-                 adhesive_k=0.2, adhesive_delta=0.0005,
-                 insulation_k=0.04, deltab=0.04,
-                 side_insulation_k=None, side_insulation_thickness_m=None,
-                 solar_I=760.0, Ta=15.0, Tfi=20.0, wind=2.0,
-                 beta=30.0, M=1.0, tau=0.90, n_cover=1.52,
-                 eps_p=0.95, alpha=0.95, Dh_ratio=3.0,
-                 connection_fraction=0.5, K_branch_in=0.0, K_branch_out=0.0,
-                 pump_efficiency=0.65, nx=36, ny_per_gap=5,
-                 max_outer=35, max_plate=800, relax=0.55,
-                 cover_emissivity=None):
-    L2 = N * w
-    Ap = L1 * L2
-    dx = L1 / float(nx)
-    ny = max(N * ny_per_gap, N + 2)
-    dy = L2 / float(ny)
-    S = solar_I * (tau ** M) * alpha
-    hw = 5.7 + 3.8 * wind
-    fwind = (1.0 - 0.04 * hw + 0.0005 * hw ** 2) * (1.0 + 0.091 * M)
-    C = 365.9 * (1.0 - 0.00883 * beta + 0.0001298 * beta ** 2)
-    # Infrared emissivity of the cover is a material property (glass is
-    # opaque in the infrared); it is not 1 - R - tau of the solar band.
-    eps_c = 0.88 if cover_emissivity is None else cover_emissivity
-    Ub = insulation_k / deltab
-    side_k = insulation_k if side_insulation_k is None else side_insulation_k
-    side_delta = deltab if side_insulation_thickness_m is None else side_insulation_thickness_m
-    if side_k <= 0 or side_delta <= 0:
-        raise ValueError("Side insulation conductivity and thickness must be positive.")
-    # Edge loss, legacy relation: conduction through the side insulation
-    # over the full perimeter 2*(L1+L2) and the edge height L3, with the
-    # mean temperature drop taken as half of plate minus ambient; the two
-    # factors cancel to (L1+L2). L3 is the box height, set by the back
-    # insulation.
-    L3 = deltab + M * 0.03 + 0.01
-    Us = ((L1 + L2) * L3 * side_k) / (L1 * L2 * side_delta)
+CONNECTION_TYPES = ('below_plate', 'above_plate', 'in_line')
 
-    Tf_prop = Tfi
-    rho, mu, cp, k, hyd, flows, tube_data = _fluid_state(
-        Tf_prop, mdot_total, N, di, L1, w, Dh_ratio * di,
-        connection_fraction, K_branch_in, K_branch_out)
 
-    # Tube center positions; grid rows are assigned to the nearest center.
-    ycenters = [(i + 0.5) * w for i in range(N)]
-    tube_rows = [min(range(ny), key=lambda j: abs((j + 0.5) * dy - yc)) for yc in ycenters]
-    tube_row_map = {}
-    for i, row in enumerate(tube_rows):
-        tube_row_map.setdefault(row, []).append(i)
+def coupled_case(*args, **kwargs):
+    # Kept for older scripts; the plate solver options of the former
+    # point-iteration version are accepted and ignored.
+    kwargs.pop('max_plate', None)
+    return coupled_case_fast(*args, **kwargs)
 
-    # Initial plate temperature and fluid profile.
-    T = [[Tfi for _ in range(ny)] for _ in range(nx)]
-    tube_tf = [[Tfi for _ in range(nx + 1)] for _ in range(N)]
-    UL = 4.0
-
-    for outer in range(max_outer):
-        old_T = [r[:] for r in T]
-        Tmean = sum(sum(r) for r in T) / (nx * ny)
-        UL = top_loss_coefficient(Tmean, Ta, hw, M, C, fwind, eps_p, eps_c) + Ub + Us
-
-        # March each tube with the current plate temperature.
-        for i in range(N):
-            Gprime = 1.0 / (1.0 / (tube_data[i][4] * math.pi * di) +
-                             adhesive_delta / (adhesive_k * math.pi * do))
-            tube_tf[i][0] = Tfi
-            mcp = flows[i] * cp
-            for ix in range(nx):
-                Tp = T[ix][tube_rows[i]]
-                a = Gprime * dx / mcp
-                e = math.exp(-a)
-                tube_tf[i][ix + 1] = Tp - (Tp - tube_tf[i][ix]) * e
-
-        # Water properties follow the mean fluid temperature.
-        Tf_mean = 0.5 * (Tfi + sum(flows[i] * tube_tf[i][-1] for i in range(N)) / mdot_total)
-        props_updated = abs(Tf_mean - Tf_prop) > 0.25
-        if props_updated:
-            Tf_prop = Tf_mean
-            rho, mu, cp, k, hyd, flows, tube_data = _fluid_state(
-                Tf_prop, mdot_total, N, di, L1, w, Dh_ratio * di,
-                connection_fraction, K_branch_in, K_branch_out)
-
-        # Gauss-Seidel plate solve with the fluid temperatures held fixed.
-        Gx = plate_k * plate_delta * dy / dx
-        Gy = plate_k * plate_delta * dx / dy
-        cell_area = dx * dy
-        for _ in range(max_plate):
-            max_change = 0.0
-            for ix in range(nx):
-                for iy in range(ny):
-                    diag = UL * cell_area
-                    rhs = S * cell_area + UL * cell_area * Ta
-                    if ix > 0:
-                        diag += Gx; rhs += Gx * T[ix - 1][iy]
-                    if ix < nx - 1:
-                        diag += Gx; rhs += Gx * T[ix + 1][iy]
-                    if iy > 0:
-                        diag += Gy; rhs += Gy * T[ix][iy - 1]
-                    if iy < ny - 1:
-                        diag += Gy; rhs += Gy * T[ix][iy + 1]
-                    if iy in tube_row_map:
-                        for ti in tube_row_map[iy]:
-                            Gprime = 1.0 / (1.0 / (tube_data[ti][4] * math.pi * di) +
-                                             adhesive_delta / (adhesive_k * math.pi * do))
-                            gcell = Gprime * dx
-                            diag += gcell
-                            rhs += gcell * tube_tf[ti][ix]
-                    newv = rhs / diag
-                    dv = newv - T[ix][iy]
-                    T[ix][iy] += relax * dv
-                    if abs(dv) > max_change:
-                        max_change = abs(dv)
-            if max_change < 1e-6:
-                break
-
-        diff = max(abs(T[ix][iy] - old_T[ix][iy]) for ix in range(nx) for iy in range(ny))
-        if diff < 2e-5 and not props_updated:
-            break
-
-    # Final fluid march and heat output.
-    q_tubes = []
-    Tfo = []
-    for i in range(N):
-        Gprime = 1.0 / (1.0 / (tube_data[i][4] * math.pi * di) +
-                         adhesive_delta / (adhesive_k * math.pi * do))
-        tube_tf[i][0] = Tfi
-        mcp = flows[i] * cp
-        for ix in range(nx):
-            Tp = T[ix][tube_rows[i]]
-            a = Gprime * dx / mcp
-            tube_tf[i][ix + 1] = Tp - (Tp - tube_tf[i][ix]) * math.exp(-a)
-        Tfo.append(tube_tf[i][-1])
-        q_tubes.append(flows[i] * cp * (Tfo[-1] - Tfi))
-    q = sum(q_tubes)
-    eta = q / (Ap * solar_I)
-    Tavg = sum(sum(r) for r in T) / (nx * ny)
-    Tmax = max(max(r) for r in T)
-    Tmin = min(min(r) for r in T)
-    Qvol = mdot_total / rho
-    pump_power = hyd["dp_path_Pa"] * Qvol / pump_efficiency
-    absorbed = S * Ap
-    losses = sum(sum(UL * (T[ix][iy] - Ta) * cell_area for iy in range(ny)) for ix in range(nx))
-    balance_error = (absorbed - losses - q) / max(abs(absorbed), 1.0)
-    return {
-        "N": N, "w_m": w, "L1_m": L1, "L2_m": L2, "Ap_m2": Ap,
-        "q_W": q, "efficiency": eta, "UL_W_m2K": UL,
-        "Tavg_C": Tavg, "Tmax_C": Tmax, "Tmin_C": Tmin,
-        "Tfo_mean_C": sum(Tfo) / N, "Tfo_min_C": min(Tfo), "Tfo_max_C": max(Tfo),
-        "Re_mean": sum(x[1] for x in tube_data) / N,
-        "hf_mean": sum(x[4] for x in tube_data) / N,
-        "flow_nonuniformity": hyd["flow_nonuniformity"],
-        "dp_system_Pa": hyd["dp_path_Pa"], "pump_power_W": pump_power,
-        "balance_error_fraction": balance_error,
-        "tube_flows": flows, "tube_Tfo": Tfo,
-        "plate_temperature_C": T,
-        "iterations_outer": outer + 1,
-        "water_temperature_C": Tf_prop, "water_density_kg_m3": rho,
-        "water_viscosity_Pa_s": mu, "water_cp_J_kgK": cp, "water_k_W_mK": k
-    }
 
 def solve_L1_for_q(mdot_total, N, w, q_target, L1_lo=1.0, L1_hi=5.0, **kwargs):
-    # Expand upper bound if necessary.
-    rlo = coupled_case(mdot_total, N, w, L1_lo, **kwargs)
-    rhi = coupled_case(mdot_total, N, w, L1_hi, **kwargs)
-    for _ in range(6):
-        if rhi["q_W"] >= q_target:
-            break
-        L1_hi *= 1.4
-        rhi = coupled_case(mdot_total, N, w, L1_hi, **kwargs)
-    if rlo["q_W"] >= q_target:
-        return rlo
-    if rhi["q_W"] < q_target:
-        raise ValueError("Target duty not reached by L1 upper bound")
-    for _ in range(18):
-        mid = 0.5 * (L1_lo + L1_hi)
-        rm = coupled_case(mdot_total, N, w, mid, **kwargs)
-        if rm["q_W"] < q_target:
-            L1_lo = mid
-        else:
-            L1_hi = mid
-    return coupled_case(mdot_total, N, w, 0.5 * (L1_lo + L1_hi), **kwargs)
+    kwargs.pop('max_plate', None)
+    return solve_L1_for_q_fast(mdot_total, N, w, q_target, L1_lo, L1_hi, **kwargs)
 
 
 def coupled_case_fast(mdot_total=0.1, N=10, w=0.10, L1=3.0,
@@ -416,9 +249,23 @@ def coupled_case_fast(mdot_total=0.1, N=10, w=0.10, L1=3.0,
                  eps_p=0.95, alpha=0.95, Dh_ratio=3.0,
                  connection_fraction=0.5, K_branch_in=0.0, K_branch_out=0.0,
                  pump_efficiency=0.65, nx=40, ny_per_gap=5,
-                 max_outer=30, relax=0.6, cover_emissivity=None):
+                 max_outer=30, relax=0.6, cover_emissivity=None,
+                 connection_type='below_plate'):
     # Pure-Python implementation: intentionally no NumPy/SciPy dependency.
     # This is compatible with stock Python 3.7.2 + IDLE.
+    #
+    # Tube-to-plate connection, following the three legacy arrangements:
+    #   below_plate: plate -> bond -> tube wall -> water; the bond is as wide
+    #                as the tube, so its resistance per metre of tube is
+    #                adhesive_delta / (adhesive_k * do).
+    #   above_plate: the strip of width do under the tube gains and loses
+    #                heat at the tube-wall temperature; only the heat coming
+    #                from the fins crosses the bond.
+    #   in_line:     the tube is part of the plate, no bond resistance.
+    # In all three the plate strip of width do at the tube carries no fin
+    # resistance, as in the classical F-prime relations.
+    if connection_type not in CONNECTION_TYPES:
+        raise ValueError('connection_type must be below_plate, above_plate or in_line')
     L2=N*w; Ap=L1*L2; dx=L1/float(nx); ny=max(N*ny_per_gap,N+2); dy=L2/float(ny)
     S=solar_I*(tau**M)*alpha; hw=5.7+3.8*wind
     fwind=(1-.04*hw+.0005*hw**2)*(1+.091*M); C=365.9*(1-.00883*beta+.0001298*beta**2)
@@ -433,23 +280,51 @@ def coupled_case_fast(mdot_total=0.1, N=10, w=0.10, L1=3.0,
     Tf_prop=Tfi
     rho,mu,cp,k,hyd,flows,tube_data=_fluid_state(Tf_prop,mdot_total,N,di,L1,w,Dh_ratio*di,connection_fraction,K_branch_in,K_branch_out)
     tube_rows=[min(range(ny),key=lambda j:abs((j+.5)*dy-(i+.5)*w)) for i in range(N)]
+    is_tube_row=[False]*ny
+    for row in tube_rows: is_tube_row[row]=True
     T=[[Tfi for _ in range(ny)] for _ in range(nx)]
     tube_tf=[[Tfi for _ in range(nx+1)] for _ in range(N)]
     cell_area=dx*dy
+    strip=min(do,dy)
+    above=connection_type=='above_plate'
+    bond_R=0.0 if connection_type=='in_line' else adhesive_delta/(adhesive_k*do)
+    # Conductance of each y-face; next to a tube the conduction path is
+    # shorter by half the strip width.
+    Gx=plate_k*plate_delta*dy/dx
+    gy=[0.0]*ny
+    for iy in range(ny-1):
+        cut=0.5*strip*(is_tube_row[iy]+is_tube_row[iy+1])
+        gy[iy]=plate_k*plate_delta*dx/max(dy-cut,0.25*dy)
     UL=4.0
+
+    def tube_terms(ti):
+        # Returns (a, lam, G1, G2, G3) of one tube: the water approaches
+        # lam*Tplate + (1-lam)*Tstar with exponent a per x-step.
+        G2=tube_data[ti][4]*math.pi*di
+        mcp=flows[ti]*cp
+        if above:
+            G1=1.0/bond_R; G3=UL*strip
+            return G2*(G1+G3)/(G1+G2+G3)*dx/mcp, G1/(G1+G3), G1, G2, G3
+        return dx/((1.0/G2+bond_R)*mcp), 1.0, 0.0, G2, 0.0
+
+    def march():
+        Tstar=Ta+S/UL
+        for i in range(N):
+            a,lam,G1,G2,G3=tube_terms(i); e=math.exp(-a); row=tube_rows[i]
+            tf=Tfi; tube_tf[i][0]=Tfi
+            for ix in range(nx):
+                teq=lam*T[ix][row]+(1.0-lam)*Tstar
+                tf=teq-(teq-tf)*e
+                tube_tf[i][ix+1]=tf
+
     for outer in range(max_outer):
         max_change=0.0
         Tprev=[row[:] for row in T]
         Tmean=sum(sum(row) for row in T)/(nx*ny)
         UL=top_loss_coefficient(Tmean,Ta,hw,M,C,fwind,eps_p,eps_c)+Ub+Us
+        Tstar=Ta+S/UL
         # Fluid march using the previous/current plate temperatures.
-        for i in range(N):
-            hf=tube_data[i][4]
-            Gp=1/(1/(hf*math.pi*di)+adhesive_delta/(adhesive_k*math.pi*do))
-            mcp=flows[i]*cp
-            a=Gp*dx/mcp; e=math.exp(-a); tube_tf[i][0]=Tfi
-            for ix in range(nx):
-                tube_tf[i][ix+1]=T[ix][tube_rows[i]]-(T[ix][tube_rows[i]]-tube_tf[i][ix])*e
+        march()
         # Water properties follow the mean fluid temperature.
         Tf_mean=0.5*(Tfi+sum(flows[i]*tube_tf[i][-1] for i in range(N))/mdot_total)
         props_updated=abs(Tf_mean-Tf_prop)>0.25
@@ -458,28 +333,32 @@ def coupled_case_fast(mdot_total=0.1, N=10, w=0.10, L1=3.0,
             rho,mu,cp,k,hyd,flows,tube_data=_fluid_state(Tf_prop,mdot_total,N,di,L1,w,Dh_ratio*di,connection_fraction,K_branch_in,K_branch_out)
         # Plate conduction: each x-station is a tridiagonal system in y and is
         # solved exactly; the stations are swept until the x-coupling settles.
-        Gx=plate_k*plate_delta*dy/dx
-        Gy=plate_k*plate_delta*dx/dy
-        base=UL*cell_area; src=S*cell_area+UL*cell_area*Ta
+        area=[cell_area]*ny
         gc_row=[0.0]*ny; gt=[[0.0]*ny for _ in range(nx)]
         for ti,row in enumerate(tube_rows):
-            hf=tube_data[ti][4]
-            Gp=1/(1/(hf*math.pi*di)+adhesive_delta/(adhesive_k*math.pi*do))
-            gc=flows[ti]*cp*(1-math.exp(-Gp*dx/(flows[ti]*cp)))
-            gc_row[row]+=gc
-            for ix in range(nx): gt[ix][row]+=gc*tube_tf[ti][ix]
+            a,lam,G1,G2,G3=tube_terms(ti); e=math.exp(-a); mcp=flows[ti]*cp
+            if above:
+                c=(1.0-e)/a; sg=G1+G2+G3
+                area[row]-=strip*dx
+                gc_row[row]+=dx*G1/sg*(G2+G3-G2*(1.0-c)*lam)
+                kstar=dx*G1/sg*(G3+G2*(1.0-c)*(1.0-lam))*Tstar; kf=dx*G1/sg*G2*c
+                for ix in range(nx): gt[ix][row]+=kstar+kf*tube_tf[ti][ix]
+            else:
+                gc=mcp*(1.0-e)
+                gc_row[row]+=gc
+                for ix in range(nx): gt[ix][row]+=gc*tube_tf[ti][ix]
         # Elimination factors for a station with 0, 1 or 2 x-neighbours.
         factors=[]
         for n_side in (0,1,2):
             inv=[0.0]*ny; up=[0.0]*ny; prev_up=0.0
             for iy in range(ny):
-                diag=base+n_side*Gx+gc_row[iy]
-                if iy>0: diag+=Gy
-                if iy<ny-1: diag+=Gy
-                inv[iy]=1.0/(diag-Gy*prev_up)
-                prev_up=Gy*inv[iy]; up[iy]=prev_up
+                diag=UL*area[iy]+n_side*Gx+gc_row[iy]+gy[iy]
+                if iy>0: diag+=gy[iy-1]; diag-=gy[iy-1]*prev_up
+                inv[iy]=1.0/diag
+                prev_up=gy[iy]*inv[iy]; up[iy]=prev_up
             factors.append((inv,up))
         fwd=[0.0]*ny
+        src=[(S+UL*Ta)*area[iy] for iy in range(ny)]
         for sweep in range(350):
             sweep_change=0.0
             for ix in range(nx):
@@ -488,10 +367,11 @@ def coupled_case_fast(mdot_total=0.1, N=10, w=0.10, L1=3.0,
                 inv,up=factors[(left is not None)+(right is not None)]
                 g=gt[ix]; acc=0.0
                 for iy in range(ny):
-                    rhs=src+g[iy]
+                    rhs=src[iy]+g[iy]
                     if left is not None: rhs+=Gx*left[iy]
                     if right is not None: rhs+=Gx*right[iy]
-                    acc=(rhs+Gy*acc)*inv[iy]
+                    if iy>0: rhs+=gy[iy-1]*acc
+                    acc=rhs*inv[iy]
                     fwd[iy]=acc
                 row=T[ix]; newT=0.0
                 for iy in range(ny-1,-1,-1):
@@ -506,15 +386,25 @@ def coupled_case_fast(mdot_total=0.1, N=10, w=0.10, L1=3.0,
                 if d>max_change: max_change=d
         if max_change<2e-5 and not props_updated: break
     # final fluid march and outputs
-    q_t=[]; Tfo=[]
-    for i in range(N):
-        hf=tube_data[i][4]; Gp=1/(1/(hf*math.pi*di)+adhesive_delta/(adhesive_k*math.pi*do)); mcp=flows[i]*cp; a=Gp*dx/mcp; e=math.exp(-a); tf=Tfi
-        for ix in range(nx): tf=T[ix][tube_rows[i]]-(T[ix][tube_rows[i]]-tf)*e
-        Tfo.append(tf); q_t.append(flows[i]*cp*(tf-Tfi))
+    march()
+    Tfo=[tube_tf[i][-1] for i in range(N)]
+    q_t=[flows[i]*cp*(Tfo[i]-Tfi) for i in range(N)]
     q=sum(q_t); eta=q/(Ap*solar_I); Tavg=sum(sum(row) for row in T)/(nx*ny); Tmax=max(max(row) for row in T); Tmin=min(min(row) for row in T)
     pump=hyd['dp_path_Pa']*(mdot_total/rho)/pump_efficiency
-    absorbed=S*Ap; losses=sum(UL*(T[ix][iy]-Ta)*cell_area for ix in range(nx) for iy in range(ny)); bal=(absorbed-losses-q)/max(abs(absorbed),1.)
-    return {'N':N,'w_m':w,'L1_m':L1,'L2_m':L2,'Ap_m2':Ap,'q_W':q,'efficiency':eta,'UL_W_m2K':UL,'Tavg_C':Tavg,'Tmax_C':Tmax,'Tmin_C':Tmin,'Tfo_mean_C':sum(Tfo)/N,'Tfo_min_C':min(Tfo),'Tfo_max_C':max(Tfo),'Re_mean':sum(x[1] for x in tube_data)/N,'hf_mean':sum(x[4] for x in tube_data)/N,'flow_nonuniformity':hyd['flow_nonuniformity'],'dp_system_Pa':hyd['dp_path_Pa'],'pump_power_W':pump,'balance_error_fraction':bal,'tube_flows':flows,'tube_Tfo':Tfo,'plate_temperature_C':T,'iterations_outer':outer+1,'water_temperature_C':Tf_prop,'water_density_kg_m3':rho,'water_viscosity_Pa_s':mu,'water_cp_J_kgK':cp,'water_k_W_mK':k}
+    area=[cell_area]*ny
+    losses=0.0
+    if above:
+        Tstar=Ta+S/UL
+        for ti,row in enumerate(tube_rows):
+            a,lam,G1,G2,G3=tube_terms(ti); c=(1.0-math.exp(-a))/a
+            area[row]-=strip*dx
+            for ix in range(nx):
+                teq=lam*T[ix][row]+(1.0-lam)*Tstar
+                tf_avg=teq-(teq-tube_tf[ti][ix])*c
+                tw=(G1*T[ix][row]+G2*tf_avg+G3*Tstar)/(G1+G2+G3)
+                losses+=UL*strip*dx*(tw-Ta)
+    absorbed=S*Ap; losses+=sum(UL*(T[ix][iy]-Ta)*area[iy] for ix in range(nx) for iy in range(ny)); bal=(absorbed-losses-q)/max(abs(absorbed),1.)
+    return {'N':N,'w_m':w,'L1_m':L1,'L2_m':L2,'Ap_m2':Ap,'q_W':q,'efficiency':eta,'UL_W_m2K':UL,'Tavg_C':Tavg,'Tmax_C':Tmax,'Tmin_C':Tmin,'Tfo_mean_C':sum(Tfo)/N,'Tfo_min_C':min(Tfo),'Tfo_max_C':max(Tfo),'Re_mean':sum(x[1] for x in tube_data)/N,'hf_mean':sum(x[4] for x in tube_data)/N,'flow_nonuniformity':hyd['flow_nonuniformity'],'dp_system_Pa':hyd['dp_path_Pa'],'pump_power_W':pump,'balance_error_fraction':bal,'tube_flows':flows,'tube_Tfo':Tfo,'plate_temperature_C':T,'iterations_outer':outer+1,'water_temperature_C':Tf_prop,'water_density_kg_m3':rho,'water_viscosity_Pa_s':mu,'water_cp_J_kgK':cp,'water_k_W_mK':k,'connection_type':connection_type}
 
 def solve_L1_for_q_fast(mdot_total,N,w,q_target,L1_lo=1.0,L1_hi=5.0,L1_limit=None,q_tol=0.1,**kwargs):
     # Shortest length that delivers q_target, never shorter than L1_lo.

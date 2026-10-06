@@ -140,14 +140,11 @@ def design_collector(heat_required,inlet_temperature,ambient_temperature,
     if adh_k<=0: raise ValueError('Adhesive thermal conductivity must be positive.')
     if adh_delta<=0: raise ValueError('Adhesive thickness must be positive for the current 2-D engineering model.')
 
-    # Legacy BASIC only asked for ka. The thickness is retained here because
-    # the modern 2-D model represents an explicit adhesive thermal resistance.
-    # For in-line tubes the coupling is approximated as direct contact.
-    model_adh_k=adh_k; model_adh_delta=adh_delta
+    # The model applies the legacy relation of the selected connection:
+    # bond resistance adhesive_thickness/(ka*Do) for tubes below the plate,
+    # the same bond only under the fins for tubes above the plate, and no
+    # bond for in-line tubes.
     connection_note=connections['model_note']
-    if connection_type=='in_line':
-        model_adh_k=1.0e6
-        model_adh_delta=1.0e-9
 
     if tube_price_per_m is None: tube_price_per_m=_f(tube,'cost_per_m')
     if absorber_price_per_m2 is None: absorber_price_per_m2=_f(absorber,'cost_per_m2')
@@ -186,7 +183,7 @@ def design_collector(heat_required,inlet_temperature,ambient_temperature,
                     r=solve_L1_for_q_fast(
                         mdot_total=mdot_here,N=N,w=w,q_target=heat_required,L1_limit=max_L1,
                         di=di,do=do,plate_k=plate_k,plate_delta=plate_delta,
-                        adhesive_k=model_adh_k,adhesive_delta=model_adh_delta,
+                        adhesive_k=adh_k,adhesive_delta=adh_delta,connection_type=connection_type,
                         insulation_k=ins_k,deltab=ins_delta,
                         side_insulation_k=side_ins_k,side_insulation_thickness_m=side_ins_delta,
                         solar_I=solar_irradiance,Ta=ambient_temperature,Tfi=inlet_temperature,

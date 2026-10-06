@@ -19,8 +19,7 @@ IMPORTANT MODEL STATUS
 - The legacy source loops over one or two covers (mm=1..2) and uses tau^mm in the absorbed solar term. v1.3 preserves this for identical/effective covers.
 - For two different cover materials, v1.3 uses an explicit engineering approximation: total transmittance is the product of the two transmittances and refractive index is averaged. This is NOT a rigorous multi-layer optical/radiative solver.
 - Cover gap is stored and reported but is not yet active in the legacy top-loss equation. It should not be interpreted as a validated gap optimization variable yet.
-- The current 2-D thermal model uses the adhesive resistance coupling for connection types 1 and 2; their detailed geometry-specific legacy F' equations remain a reference and are not silently claimed to be reproduced by the 2-D grid model.
-- For connection type 3, the current 2-D model uses a direct tube-to-plate coupling approximation.
+- The 2-D thermal model applies a separate relation for each of the three connection types, following the legacy F' equations: bond resistance = adhesive thickness / (ka x tube OD) for tubes below the plate; the same bond on the fin path only, with the strip under the tube at tube-wall temperature, for tubes above the plate; no bond for in-line tubes. With uniform flow the model reproduces the legacy F' relations within 0.2% on a fine grid and about 1.3% (conservative) on the coarse design grid.
 - Catalog numerical values marked example_engineering are placeholders and must be verified/replaced before engineering decisions.
 - Current fluid model is water only. Density, viscosity, specific heat and conductivity are interpolated from a 0-100 C table at the mean fluid temperature.
 
