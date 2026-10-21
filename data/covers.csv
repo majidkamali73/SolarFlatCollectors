@@ -2,3 +2,9 @@ id,name,material,transmittance,refractive_index,emissivity,thickness_m,cost_per_
 lowiron_4mm,Low-iron glass 4 mm,Low-iron glass,0.90,1.52,0.84,0.004,1.0,example_engineering,Example optical values; verify actual glass product
 float_4mm,Float glass 4 mm,Float glass,0.88,1.52,0.84,0.004,1.0,example_engineering,Example optical values; verify actual glass product
 poly_3mm,Polycarbonate 3 mm,Polycarbonate,0.86,1.58,0.90,0.003,1.0,example_engineering,Example optical values; verify actual sheet product
+glass_3mm_thesis,Ordinary glass 3.2 mm (thesis),Glass,0.843,1.518,0.84,0.0032,1.0,thesis_table,Thesis cover table; IR emissivity typical for glass
+lexan_3mm,Polycarbonate Lexan 3.2 mm (thesis),Polycarbonate,0.641,1.586,0.88,0.0032,1.0,estimate,Thesis cover table for transmittance and n; IR emissivity estimated (IR transmittance 2%); service limit about 121-132 C
+plexiglas_3mm,Acrylic Plexiglas 3.2 mm (thesis),Acrylic,0.896,1.49,0.88,0.0032,1.0,estimate,Thesis cover table for transmittance and n; IR emissivity estimated (IR transmittance 2%); service limit about 82-93 C
+fep_film,Teflon FEP film 0.13 mm (thesis),FEP,0.923,1.343,0.69,0.00013,1.0,estimate,Thesis table; IR emissivity estimated as 1 - IR transmittance (25.6%) - 0.05; IR-transparent cover: top-loss correlation is optimistic
+pvf_film,Tedlar PVF film 0.1 mm (thesis),PVF,0.922,1.46,0.74,0.0001,1.0,estimate,Thesis table; IR emissivity estimated as 1 - IR transmittance (20.7%) - 0.05; IR-transparent cover: top-loss correlation is optimistic
+fiberglass_0p6mm,Fiberglass Sunlite 0.6 mm (thesis),Fiberglass,0.865,1.54,0.87,0.0006,1.0,estimate,Thesis table; IR emissivity estimated as 1 - IR transmittance (7.6%) - 0.05; service limit about 93 C

@@ -79,6 +79,7 @@ def design_collector(heat_required,inlet_temperature,ambient_temperature,
                      absorber_price_per_m2=None,cover_price_per_m2=None,
                      header_price_per_m=0.0,connection_price_each=0.0,
                      insulation_price_per_m2=None,max_dp_Pa=None,solver_options=None,
+                     electricity_price_per_kWh=0.0,pump_operating_hours=20000.0,
                      progress=None,should_stop=None):
     # progress(done,total) is called before every candidate; should_stop()
     # returning True aborts the scan with DesignCancelled.
@@ -107,7 +108,9 @@ def design_collector(heat_required,inlet_temperature,ambient_temperature,
     if connection_type not in ('below_plate','above_plate','in_line'):
         raise ValueError('Unknown connection type.')
     if solver_options is None:
-        solver_options={'nx':16,'ny_per_gap':2,'max_outer':15}
+        # Three nodes per tube pitch put the tube at a cell centre; two nodes
+        # lump the whole fin into one cell (about 1.3% low on useful heat).
+        solver_options={'nx':16,'ny_per_gap':3,'max_outer':15}
 
     absorber=get_by_id(catalog('absorbers'),absorber_id)
     tube=get_by_id(catalog('tubes'),tube_id)
@@ -198,9 +201,13 @@ def design_collector(heat_required,inlet_temperature,ambient_temperature,
                 tube_length=N*r['L1_m']
                 mean_speed=mdot_here/(rho_ref*N*tube_area)
                 re_mean=r['Re_mean']
-                cost=(tube_length*tube_price_per_m + r['Ap_m2']*absorber_price_per_m2 +
+                material_cost=(tube_length*tube_price_per_m + r['Ap_m2']*absorber_price_per_m2 +
                       r['Ap_m2']*cover_price_per_m2 + r['Ap_m2']*insulation_price_per_m2 +
                       2*r['L2_m']*header_price_per_m + N*connection_price_each)
+                # Pumping energy over the operating hours entered (collector
+                # loop only), so that a faster flow is not free in the search.
+                pump_energy_cost=r['pump_power_W']/1000.0*pump_operating_hours*electricity_price_per_kWh
+                cost=material_cost+pump_energy_cost
                 x=dict(r)
                 x.update({'beta_deg':beta,'solar_irradiance_W_m2':solar_irradiance,'absorber_id':absorber_id,'tube_id':tube_id,'cover1_id':cover1_id,
                           'cover2_id':cover2_id or 'none','cover_count':M,'cover_gap_m':cover_gap_m,
@@ -208,7 +215,7 @@ def design_collector(heat_required,inlet_temperature,ambient_temperature,
                           'side_insulation_id':side_insulation_id,'side_insulation_thickness_m':side_ins_delta,
                           'adhesive_id':adhesive_id,'adhesive_k_W_mK':adh_k,'adhesive_thickness_m':adh_delta,
                           'connection_type':connection_type,'connection_name':connections['name'],
-                          'tube_wall_m':0.5*(do-di),'tube_length_m':tube_length,'cost':cost,
+                          'tube_wall_m':0.5*(do-di),'tube_length_m':tube_length,'cost':cost,'material_cost':material_cost,'pump_energy_cost':pump_energy_cost,
                           'flow_mode':flow_mode,'mdot_total_kg_s':mdot_here,
                           'flow_L_min':mdot_here/rho_ref*60000.0,'design_velocity_m_s':mean_speed,
                           'mean_Re':re_mean})
@@ -260,7 +267,7 @@ def format_report(result):
     add(''); add('OPERATING / ENVIRONMENT'); add('Solar irradiance  : %.2f W/m2'%r['solar_irradiance_W_m2']); add('Collector tilt beta: %.2f deg from horizontal'%r['beta_deg']); add(''); add('GEOMETRY'); add('N tubes            : %d'%r['N']); add('Tube spacing       : %.3f m'%r['w_m']); add('Collector length   : %.3f m'%r['L1_m']); add('Collector width    : %.3f m'%r['L2_m']); add('Absorber area      : %.3f m2'%r['Ap_m2']); add('Total tube length  : %.3f m'%r['tube_length_m'])
     add(''); add('THERMAL'); add('Required heat      : %.2f W'%r['q_W']); add('Efficiency         : %.3f %%'%(100*r['efficiency'])); add('T plate max        : %.2f C'%r['Tmax_C']); add('T outlet mean      : %.2f C'%r['Tfo_mean_C']); add('Overall UL         : %.3f W/m2.K'%r['UL_W_m2K'])
     add(''); add('FLOW / HYDRAULIC'); add('Flow mode          : %s'%r.get('flow_mode','manual_flow')); add('Mass flow          : %.5f kg/s  (%.3f L/min)'%(r.get('mdot_total_kg_s',0.0),r.get('flow_L_min',0.0))); add('Tube velocity      : %.3f m/s'%r.get('design_velocity_m_s',0.0)); add('Mean Reynolds      : %.0f'%r.get('mean_Re',0.0)); add('Water properties   : at %.1f C mean fluid temperature, mu=%.3e Pa.s'%(r['water_temperature_C'],r['water_viscosity_Pa_s'])); add(''); add('HYDRAULIC'); add('Pressure drop      : %.2f Pa'%r['dp_system_Pa']); add('Flow nonuniformity : %.3f %%'%(100*r['flow_nonuniformity'])); add('Pump power         : %.6f W'%r['pump_power_W'])
-    add(''); add('ECONOMIC'); add('Entered/model cost  : %.4f'%r['cost'])
+    add(''); add('ECONOMIC'); add('Material cost       : %.4f'%r.get('material_cost',r['cost'])); add('Pump energy cost    : %.4f'%r.get('pump_energy_cost',0.0)); add('Total cost          : %.4f'%r['cost'])
     add(''); add('STATUS / MODEL NOTES'); add('Thermal requirement: PASS'); add('Geometry limits    : PASS'); add('Flow uniformity    : PASS')
     if result['model_notes']['cover_gap_used'] is False: add('Cover gap          : recorded, not yet active in legacy top-loss equation')
     add('Cover model        : %s'%result['model_notes']['cover_model'])
@@ -269,5 +276,5 @@ def format_report(result):
 
 
 if __name__=='__main__':
-    res=design_collector(2090,20,15,760,2,mdot_total=.10,solver_options={'nx':12,'ny_per_gap':2,'max_outer':12})
+    res=design_collector(2090,20,15,760,2,mdot_total=.10,solver_options={'nx':16,'ny_per_gap':3,'max_outer':12})
     print(format_report(res))

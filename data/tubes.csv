@@ -2,3 +2,6 @@ id,name,material,od_m,id_m,thermal_conductivity_W_mK,cost_per_m,data_status,sour
 cu_0p5_bwg16,Copper 0.5 inch OD BWG16,Copper,0.0127,0.009398,385,1.0,example_engineering,Replace price and verify dimensions for project use
 al_0p5_wall1,Aluminium tube 12.7 mm OD x 1.0 mm wall,Aluminium,0.0127,0.0107,205,1.0,example_engineering,Example catalog value
 steel_0p5_bwg16,Steel 0.5 inch OD BWG16,Steel,0.0127,0.009398,50,1.0,example_engineering,Example catalog value
+cu_0p5_bwg14,Copper 0.5 inch OD BWG14 (thesis sample),Copper,0.0127,0.008484,385,1.0,thesis_table,Condenser tube table in the thesis; OD 0.5 in ID 0.334 in
+cu_0p625_bwg16,Copper 5/8 inch OD BWG16,Copper,0.015875,0.012573,385,1.0,thesis_table,Condenser tube table in the thesis; ID 0.495 in
+cu_0p75_bwg16,Copper 3/4 inch OD BWG16,Copper,0.01905,0.015748,385,1.0,thesis_table,Condenser tube table in the thesis; ID 0.620 in

@@ -73,6 +73,8 @@ class App(tk.Tk):
     def _costs(self):
         p=ttk.LabelFrame(self.tab3,text='Prices'); p.pack(fill='x')
         self.pt=self.field(p,'Tube [currency/m]',1,0,0); self.pa=self.field(p,'Absorber [currency/m²]',1,0,2); self.pg=self.field(p,'Cover [currency/m²]',1,1,0); self.pi=self.field(p,'Insulation [currency/m²]',1,1,2); self.ph=self.field(p,'Header [currency/m]',0,2,0); self.pj=self.field(p,'Connection each',0,2,2)
+        self.pe=self.field(p,'Electricity [currency/kWh]',0,3,0); self.hrs=self.field(p,'Pump operating hours (life)',20000,3,2)
+        ttk.Label(p,text='Enter the electricity price so that the speed search counts pumping energy; 0 ignores it.',style='Hint.TLabel').grid(row=4,column=0,columnspan=4,sticky='w',padx=6,pady=4)
         q=ttk.LabelFrame(self.tab3,text='Constraints and objective'); q.pack(fill='x',pady=8)
         self.maxL1=self.field(q,'Max length L1 [m]',3.5,0,0); self.maxL2=self.field(q,'Max width L2 [m]',1.5,0,2); self.maxnu=self.field(q,'Max nonuniformity [%]',5,1,0); self.maxdp=self.field(q,'Max pressure drop [Pa]',5000,1,2)
         self.vmin=self.field(q,'Optimization speed min [m/s]',0.20,2,0); self.vmax=self.field(q,'Optimization speed max [m/s]',0.80,2,2); self.vstep=self.field(q,'Optimization speed step [m/s]',0.10,3,0)
@@ -109,7 +111,7 @@ class App(tk.Tk):
                 absorber_id=self.abs.get(),tube_id=self.tube.get(),cover1_id=self.c1.get(),cover2_id=c2,cover_gap_m=float(self.cover_gap.get())/1000,
                 insulation_id=self.ins.get(),insulation_thickness_m=float(self.ins_th.get())/1000,side_insulation_id=self.side_ins.get(),side_insulation_thickness_m=float(self.side_ins_th.get())/1000,adhesive_id=self.adh.get(),adhesive_k_W_mK=float(self.adh_k.get()),adhesive_thickness_m=float(self.adh_th.get())/1000,
                 connection_type=self.conn.get(),mdot_total=float(self.mdot.get()),flow_mode=self.flow_mode.get(),design_velocity_m_s=float(self.flow_speed.get()),
-                velocity_values=self._velocity_values(),objective=self.obj.get(),tube_price_per_m=float(self.pt.get()),absorber_price_per_m2=float(self.pa.get()),cover_price_per_m2=float(self.pg.get()),insulation_price_per_m2=float(self.pi.get()),header_price_per_m=float(self.ph.get()),connection_price_each=float(self.pj.get()),max_dp_Pa=float(self.maxdp.get()),max_L1=float(self.maxL1.get()),max_L2=float(self.maxL2.get()),max_nonuniformity_percent=float(self.maxnu.get()),N_values=range(8,21),spacing_values=(.06,.08,.10,.12,.14,.16),solver_options={'nx':12,'ny_per_gap':2,'max_outer':12})
+                velocity_values=self._velocity_values(),objective=self.obj.get(),tube_price_per_m=float(self.pt.get()),absorber_price_per_m2=float(self.pa.get()),cover_price_per_m2=float(self.pg.get()),insulation_price_per_m2=float(self.pi.get()),header_price_per_m=float(self.ph.get()),connection_price_each=float(self.pj.get()),electricity_price_per_kWh=float(self.pe.get()),pump_operating_hours=float(self.hrs.get()),max_dp_Pa=float(self.maxdp.get()),max_L1=float(self.maxL1.get()),max_L2=float(self.maxL2.get()),max_nonuniformity_percent=float(self.maxnu.get()),N_values=range(8,21),spacing_values=(.06,.08,.10,.12,.14,.16),solver_options={'nx':16,'ny_per_gap':3,'max_outer':12})
         except Exception as e:
             self.status.config(text='Error.'); messagebox.showerror('Design error',str(e)); return
         self._stop.clear(); job={'done':0,'total':0}; self._job=job
